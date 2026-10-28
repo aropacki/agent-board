@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>@BUNDLE_ID@</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@APP@/Contents/MacOS/AgentBoard</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AGENT_BOARD_HOME</key>
+        <string>@AGENT_BOARD_HOME@</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>StandardErrorPath</key>
+    <string>@AGENT_BOARD_HOME@/app.log</string>
+</dict>
+</plist>

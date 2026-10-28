@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [{ "command": "../.agent-board/bin/journal-hook.py", "timeout": 5 }],
+    "stop": [{ "command": "../.agent-board/bin/journal-hook.py", "timeout": 5 }],
+    "postToolUse": [
+      { "command": "../.agent-board/bin/journal-hook.py", "matcher": "Shell", "timeout": 5 },
+      { "command": "../.agent-board/bin/journal-hook.py", "matcher": "MCP", "timeout": 5 },
+      { "command": "../.agent-board/bin/journal-hook.py", "matcher": "CallDynamicTool", "timeout": 5 }
+    ]
+  }
+}

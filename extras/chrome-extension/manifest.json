@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Agent Board tab groups",
+  "version": "1.0",
+  "description": "Opens a set of PRs from Agent Board as one named tab group.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtVyt1aqzWRNkqG+o0KZgviD03siDpBz0npzJoGhdeyhbbmqvp2Vg6prq/R97Hb8WzV6GKNopFaRrfNgSCKhbp8oLZK/B/4icHwQRdgg/k/wfg5RB5KyKBslc0oywSyVoQL+y+K1T3f97vxd4soDsS1rmsaxOMxYShS84ew2WXdjOGfih7YG7YtRc3Y+UVCipqgoDpNNCwwSs6ZPchH/i82dpVZeZpR17Uw9bD4z6LeVexQWjICvhaL+Z7JX0wN9vXvr0cUiqazqMovcU/bYVm/E+AcNce/ZGzQRsWvg/NlgkfN/czytN9io9t2vF0xBvdlZUgAR2rhTp/ZwgKwPW6wIDAQAB",
+  "permissions": ["tabGroups"]
+}

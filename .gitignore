@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+*.xcodeproj/
+__pycache__/
+.DS_Store
+local.mk

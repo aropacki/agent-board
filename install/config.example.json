@@ -1,0 +1,16 @@
+{
+  "tools": ["cursor", "claude-code"],
+  "terminalApp": "Terminal",
+  "newChatFolder": "~/src",
+  "worktrees": "git",
+  "worktreeRepos": ["~/src/your-repo"],
+  "issueTracker": {
+    "keyPattern": "[A-Z]{2,}-[0-9]+",
+    "name": "Jira",
+    "url": "https://your-team.atlassian.net/browse/{key}"
+  },
+  "homeRepo": "your-org/your-repo",
+  "libraryRepo": "~/src/your-repo",
+  "hiddenPRsFile": "~/.agent-board/hidden-prs",
+  "botAccounts": ["ci-bot"]
+}
