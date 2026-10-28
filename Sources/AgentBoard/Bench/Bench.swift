@@ -5,14 +5,41 @@ import SwiftUI
 enum Bench {
     static func spin(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
 
+    /// A machine with no live board, such as CI or a clone that is not installed yet, checks seeded data instead.
+    /// Runs before anything reads `boardDir`, which is fixed on first use.
+    static func seedWhenNoLiveState() -> Fixtures? {
+        let env = ProcessInfo.processInfo.environment
+        let live = env["AGENT_BOARD_HOME"].map(expandTilde) ?? NSHomeDirectory() + "/.agent-board"
+        guard !FileManager.default.fileExists(atPath: live + "/state.json") else { return nil }
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("agent-board-check")
+        try? FileManager.default.removeItem(at: home)
+        try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        setenv("AGENT_BOARD_HOME", home.path, 1)
+        precondition(boardDir.path == home.path, "seeded checks must not read the live data directory")
+        print("no live board state; checking seeded data")
+        return Fixtures()
+    }
+
     static func run() {
         let modes = ["BENCH_LOGIC", "BENCH_CONSISTENCY", "BENCH_MENUAUDIT", "BENCH_FULL", "BENCH_SNAP", "BENCH_TICKER"]
         guard modes.contains(where: { ProcessInfo.processInfo.environment[$0] != nil }) else {
             Perf.run()
             return
         }
+        let seeded = seedWhenNoLiveState()
         let board = Board()
-        while board.state == nil { spin(0.05) }
+        if let seeded {
+            seeded.seed(board)
+        } else {
+            let deadline = Date().addingTimeInterval(20)
+            while board.state == nil {
+                guard Date() < deadline else {
+                    print("FAIL: \(stateURL.path) did not load")
+                    exit(1)
+                }
+                spin(0.05)
+            }
+        }
         board.isFront = true
         let host = NSHostingView(rootView: BoardView().environment(board))
         host.sizingOptions = []
