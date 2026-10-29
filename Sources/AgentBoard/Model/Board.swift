@@ -53,6 +53,8 @@ final class Board {
     var succeeded: Set<String> = []
     var refreshing = false
     var trusted = Board.checkTrust()
+    /// macOS shows the Accessibility prompt only once per binary, so later presses go straight to Settings.
+    @ObservationIgnored var trustPrompted = false
     var confirmReturn: String?
     var isFront = false
     var now = Date()
@@ -121,10 +123,15 @@ final class Board {
         try? FileManager.default.createDirectory(at: reviewsDir, withIntermediateDirectories: true)
         if !isBench { loadReviews() }
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            self?.reload()
-            if !isBench { self?.loadReviews() }
+            guard let self else { return }
+            self.reload()
+            if !isBench { self.loadReviews() }
             let t = Board.checkTrust()
-            if self?.trusted != t { withAnimation(.snappy) { self?.trusted = t } }
+            if self.trusted != t {
+                withAnimation(.snappy) { self.trusted = t }
+                // A running process keeps the old Accessibility answer, so a new grant only takes effect in a fresh process.
+                if t { self.relaunch() }
+            }
         }
         Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.collect() }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.now = Date() }
@@ -266,13 +273,27 @@ final class Board {
 
     func ensureTrust(for tool: AgentTool) -> Bool {
         guard tool.needsAccessibility, !Tools.isTrusted(prompt: false) else { return true }
-        show(.error, "Turn on Agent Board under Accessibility, then press again.")
+        requestTrust()
+        show(.error, "Turn on Agent Board in Accessibility — the board restarts itself, then press again.")
         return false
     }
 
+    /// The launch agent keeps the app alive only after an unsuccessful exit, so exiting this way
+    /// brings up one fresh process — with the Accessibility grant — instead of a second copy.
+    func relaunch() {
+        guard !isBench else { return }
+        exit(EXIT_FAILURE)
+    }
+
     func requestTrust() {
-        _ = Tools.isTrusted(prompt: true)
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        if trustPrompted {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        } else {
+            trustPrompted = true
+            // Only this prompt: its "Open System Settings" button opens the pane and dismisses it.
+            // Opening the pane here as well would leave the dialog sitting on top of Settings.
+            _ = Tools.isTrusted(prompt: true)
+        }
     }
 
     // MARK: Quick actions
