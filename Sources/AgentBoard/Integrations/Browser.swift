@@ -84,6 +84,16 @@ private let browserQueue = DispatchQueue(label: "agentboard.browser")
 
 let chromeAccessMessage = "Allow Agent Board to control Google Chrome in System Settings → Privacy & Security → Automation, then try again."
 
+/// Why a Chrome script failed, when the user can fix it. With two copies of Chrome running, such as one started for
+/// automation with its own profile, scripts reach only one of them, which may not be the one with the user's windows.
+func chromeFailureMessage(needsAccess: Bool) -> String? {
+    if needsAccess { return chromeAccessMessage }
+    let copies = NSRunningApplication.runningApplications(withBundleIdentifier: chromeID).count
+    guard copies > 1 else { return nil }
+    return "\(copies) copies of Chrome are running, so the board can't reach your windows. Quit the extra one "
+        + "(often started by a browser automation tool), then try again."
+}
+
 func chromeHandles(_ url: URL) -> Bool {
     NSWorkspace.shared.urlForApplication(toOpen: url).flatMap { Bundle(url: $0)?.bundleIdentifier } == chromeID
         && !NSRunningApplication.runningApplications(withBundleIdentifier: chromeID).isEmpty
@@ -106,7 +116,7 @@ func openInChrome(_ string: String, background: Bool, done: @escaping (_ reused:
     runChromeScript(chromeOpenScript(string, focus: !background)) { ok, needsAccess, output in
         if ok { done(output.contains("found"), nil); return }
         openURL(string)
-        done(false, needsAccess ? chromeAccessMessage : nil)
+        done(false, chromeFailureMessage(needsAccess: needsAccess))
     }
 }
 

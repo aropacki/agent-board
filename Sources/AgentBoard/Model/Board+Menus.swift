@@ -20,7 +20,7 @@ extension Board {
                 runChromeScript(chromeTabScript(tabGroupPageURL(title: tabGroupTitle(title), urls: urls, focus: !background), focus: !background)) { ok, needsAccess, _ in
                     if ok { self.show(.ok, "Opened \(urls.count) PRs as a tab group") } else {
                         openEach()
-                        if needsAccess { self.show(.error, chromeAccessMessage) }
+                        if let message = chromeFailureMessage(needsAccess: needsAccess) { self.show(.error, message) }
                     }
                 }
             }
