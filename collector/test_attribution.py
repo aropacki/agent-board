@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Attribution tests: which slot and PRs a chat's card shows. Run: python3 collector/test_attribution.py"""
 
+import importlib.util
 import json
 import os
 import sqlite3
@@ -9,13 +10,16 @@ import tempfile
 import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collect  # noqa: E402
-from refs import pr_verb  # noqa: E402
+from refs import branches, pr_numbers, pr_verb  # noqa: E402
 from sources import cursor  # noqa: E402
 from worktrees import treehouse  # noqa: E402
 
 SLOT1 = "/Users/me/.treehouse/code-abc123/1/code"
 SLOT2 = "/Users/me/.treehouse/code-abc123/2/code"
 LEASED_AT = "2026-10-12T13:49:27-07:00"
+_spec = importlib.util.spec_from_file_location("journal_hook", os.path.join(os.path.dirname(__file__), "journal-hook.py"))
+journal_hook = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(journal_hook)
 T = collect.lease_start({"leased": True, "leased_at": LEASED_AT})
 
 
@@ -80,6 +84,20 @@ class Refs(unittest.TestCase):
         self.assertIsNone(pr_verb("gh pr checks 4242"))
         self.assertEqual(pr_verb("gh pr checkout 4242"), "checkout")
 
+    def test_a_loop_that_acts_on_each_pr_owns_every_number_in_it(self):
+        self.assertEqual(pr_numbers("for n in 11 12 13; do gh pr edit $n --body-file b$n.md; done"), {"11", "12", "13"})
+        self.assertEqual(pr_numbers('for pr in 11 12; do gh pr view "$pr" --json body; done'), set())
+
+    def test_gh_stack_names_the_branches_it_creates(self):
+        self.assertEqual(branches("gh stack init me/base me/one && gh stack add --quiet me/two; gh stack add main"),
+                         {"me/base", "me/one", "me/two"})
+
+    def test_a_stack_submit_creates_the_prs_it_prints(self):
+        h = {"event": "tool", "conversation_id": "c1", "command": "gh stack submit --auto", "dirs": [],
+             "output": "Created https://github.com/o/r/pull/11\nUpdated https://github.com/o/r/pull/12\n", "tool": ""}
+        created = [r for r in journal_hook.journal_records(h) if r.get("role") == "created"]
+        self.assertEqual([r["prs"] for r in created], [["o/r#11", "o/r#12"]])
+
 
 class TranscriptFacts(unittest.TestCase):
     def test_reads_only_new_complete_lines(self):
@@ -103,6 +121,20 @@ class TranscriptFacts(unittest.TestCase):
                 fh.write(shell("cd %s && git status" % SLOT1))
             facts = collect.transcript_facts("c1", cache, index, cursor, treehouse, {})
             self.assertEqual((facts["holders"], facts["slot"]), (["first"], SLOT1))
+
+
+class MergeTranscript(unittest.TestCase):
+    def test_transcript_prs_and_branches_count_when_the_tool_reads_no_turns(self):
+        per = {}
+        facts = {"prs": ["o/r#7"], "pr_numbers": ["8"], "branches": ["me/stack-2"]}
+        collect.merge_transcript(per, chat("c", T), None, facts)
+        self.assertEqual((per["c"]["prs"], per["c"]["pr_numbers"], per["c"]["branches"]),
+                         ({"o/r#7": "transcript"}, {"8"}, {"me/stack-2"}))
+
+    def test_a_chat_with_nothing_to_add_gets_no_summary(self):
+        per = {}
+        collect.merge_transcript(per, chat("c", T), None, {"slot": SLOT1, "holders": [], "prs": []})
+        self.assertNotIn("c", per)
 
 
 class LinkedWanted(unittest.TestCase):

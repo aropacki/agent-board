@@ -30,7 +30,8 @@ from config import BOARD
 from refs import branches, pr_numbers, pr_urls, pr_verb
 
 JOURNAL = os.path.join(BOARD, "journal", "events.jsonl")
-CREATE_PR_RE = re.compile(r"\bgh\s+pr\s+create\b")
+# `gh stack submit` opens a PR for each branch of the stack and prints every link.
+CREATE_PR_RE = re.compile(r"\bgh\s+(?:pr\s+create|stack\s+submit)\b")
 
 
 def slot_of(h, wt):
@@ -107,4 +108,5 @@ def main():
     sys.exit(0)
 
 
-main()
+if __name__ == "__main__":
+    main()

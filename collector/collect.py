@@ -245,12 +245,16 @@ def backfill(now):
     print("recorded references for %d chats" % len(records))
 
 
+# Bump when refs.py or a source's lines() reads transcripts differently, so cached facts are read again.
+FACTS_VERSION = 2
+
+
 def transcript_facts(chat_id, cache, index, source, wt, known):
     """What a chat's transcript says: the last slot its shell commands cd'd into, every lease-holder label they used,
     and the PRs and branches it touched. Reads only what the transcript gained since the last call, so a long running
     chat costs little."""
     facts = cache.get(chat_id) or {}
-    if "prs" not in facts:
+    if facts.get("version") != FACTS_VERSION:
         facts = {}
     entries, offset, restarted = new_entries(index.get(chat_id), facts.get("offset", 0))
     if entries is None:
@@ -272,14 +276,19 @@ def transcript_facts(chat_id, cache, index, source, wt, known):
                 prs |= pr_urls(text)
                 nums |= pr_numbers(text)
             names |= branches(text)
-    facts = {"offset": offset, "slot": slot, "holders": sorted(holders), "prs": sorted(prs),
+    facts = {"version": FACTS_VERSION, "offset": offset, "slot": slot, "holders": sorted(holders), "prs": sorted(prs),
              "pr_numbers": sorted(nums), "branches": sorted(names)}
     cache[chat_id] = facts
     return facts
 
 
 def merge_transcript(per, chat, summary, facts):
-    """Folds what a transcript says into the chat's journal summary, for tools whose turns the transcript records."""
+    """Folds what a transcript says into the chat's journal summary. The transcript's PRs and branches count for
+    every tool, since it keeps the commands a hook may have missed; its turns count only when `summary` reads them.
+    A chat with nothing to add gets no summary, because having one is what shows an untitled chat."""
+    summary = summary or {}
+    if not (summary or any(facts.get(k) for k in ("prs", "pr_numbers", "branches"))):
+        return
     s = per.setdefault(chat["id"], empty_summary())
     if summary.get("prompt_ts", 0) > s["prompt_ts"]:
         s["prompt_ts"] = summary["prompt_ts"]
@@ -814,8 +823,7 @@ def build(now):
              if c["updated_at"] >= min(oldest_lease, now - BOARD_WINDOW_S)}
     for chat in chats:
         summary = sources.SOURCES[chat["tool"]].summary(index.get(chat["id"]), now)
-        if summary:
-            merge_transcript(per, chat, summary, facts.get(chat["id"], {}))
+        merge_transcript(per, chat, summary, facts.get(chat["id"], {}))
     attributed = claim_slots(chats, per, slots, facts)
     write_atomic(TRANSCRIPT_CACHE, json.dumps({cid: f for cid, f in tcache.items() if cid in facts}))
 
