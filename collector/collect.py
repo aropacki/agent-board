@@ -51,7 +51,9 @@ SEARCH_MAX = 60
 MISS_LIMIT = 3
 # A PR's updatedAt misses some changes, resolving a thread among them, so full details are refetched this often anyway.
 FULL_MAX_AGE_S = 600
-LIGHT_BATCH = 40
+# GitHub ends a GraphQL query near 10 seconds with a 504 or a cut-off body. Each PR's CI rollup is heavy, so a
+# batch must stay well under that.
+LIGHT_BATCH = 10
 PR_LOG = os.path.join(CACHE_DIR, "pr-refresh.jsonl")
 PR_LOG_KEEP = 500
 LSOF_TTL_S = 60
@@ -627,8 +629,10 @@ def pr_nodes(wanted, now):
     # A closed PR changes only by reopening, which moves updatedAt, so its details never age out.
     known = [p for p in wanted if stored(p) and (now - stored(p)["at"] < FULL_MAX_AGE_S or stored(p)["node"].get("state") != "OPEN")]
     nodes, empty = {}, set()
-    for batch in chunks(known, LIGHT_BATCH):
-        found, why = fetch_light(batch)
+    light_batches = chunks(known, LIGHT_BATCH)
+    with ThreadPoolExecutor(max_workers=max(1, min(4, len(light_batches)))) as pool:
+        light_found = list(pool.map(fetch_light, light_batches))
+    for batch, (found, why) in zip(light_batches, light_found):
         if why:
             return None, why
         for pair, light in zip(batch, found):
