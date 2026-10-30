@@ -22,7 +22,7 @@ enum Bench {
 
     static func run() {
         UserDefaults.standard.set(ProcessInfo.processInfo.environment["BENCH_PAGE"] ?? DiffPage.files.rawValue, forKey: "diffPage")
-        let modes = ["BENCH_LOGIC", "BENCH_CONSISTENCY", "BENCH_MENUAUDIT", "BENCH_FULL", "BENCH_SNAP", "BENCH_TICKER"]
+        let modes = ["BENCH_LOGIC", "BENCH_CONSISTENCY", "BENCH_MENUAUDIT", "BENCH_FULL", "BENCH_SNAP", "BENCH_TICKER", "BENCH_BANNER"]
         guard modes.contains(where: { ProcessInfo.processInfo.environment[$0] != nil }) else {
             Perf.run()
             return
@@ -113,6 +113,28 @@ enum Bench {
         let scroller = scrollView(host)
         if ProcessInfo.processInfo.environment["BENCH_LOGIC"] != nil {
             logic()
+            return
+        }
+        if let out = ProcessInfo.processInfo.environment["BENCH_BANNER"] {
+            let banners = Banners()
+            banners.items = [
+                TickerEvent(kind: .review, text: "Review requested: #138222 validata: add resolution_strategy (model_first / "
+                    + "seller_first) to confidence signals · @octocat"),
+                TickerEvent(kind: .comments, text: "Comment from @octocat: #4512 Example PR title · “Can we keep the old name "
+                    + "here? Callers outside this package still import it.”"),
+                TickerEvent(kind: .changes, text: "Changes requested: #4513 Another example PR"),
+            ]
+            let bannerHost = NSHostingView(rootView: BannerStack(banners: banners, open: { _ in }, close: { _ in }, resized: { _ in }))
+            bannerHost.sizingOptions = []
+            let stack = NSWindow(contentRect: NSRect(x: -9000, y: -4000, width: 400, height: 420), styleMask: .borderless,
+                                 backing: .buffered, defer: false)
+            stack.backgroundColor = NSColor(white: 0.32, alpha: 1)
+            stack.contentView = bannerHost
+            stack.orderFrontRegardless()
+            spin(Double(ProcessInfo.processInfo.environment["BENCH_WAIT"] ?? "3") ?? 3)
+            let rep = bannerHost.bitmapImageRepForCachingDisplay(in: bannerHost.bounds)!
+            bannerHost.cacheDisplay(in: bannerHost.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
             return
         }
         if let out = ProcessInfo.processInfo.environment["BENCH_TICKER"] {

@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         installMenuMonitor(board)
         board.popupChanged = { [weak self] in self?.syncPopup() }
         board.holdPopup = { [weak self] in self?.holdPopup($0) }
-        let notifier = Notifier(board: board)
+        let notifier = Notifier(board: board, space: tickerSpace)
         self.notifier = notifier
         board.alert = { notifier.post($0) }
         hotKey = GlobalHotKey(keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey)) { [weak self] in self?.togglePopup() }

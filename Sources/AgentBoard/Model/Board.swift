@@ -151,7 +151,9 @@ final class Board {
         // `notifyutil -p <bundle id>.demo` plays a sample notification without logging it.
         var token: Int32 = 0
         notify_register_dispatch((Bundle.main.bundleIdentifier ?? "agentboard") + ".demo", &token, .main) { [weak self] _ in
-            self?.pushTicker([TickerEvent(kind: .review, text: "Review requested: #000 Sample notification · @agentboard")], log: false)
+            let sample = [TickerEvent(kind: .review, text: "Review requested: #000 Sample notification · @agentboard")]
+            self?.pushTicker(sample, log: false)
+            self?.alert?(sample)
         }
     }
 
