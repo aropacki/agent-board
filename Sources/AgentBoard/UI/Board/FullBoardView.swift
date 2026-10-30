@@ -2,7 +2,11 @@ import AppKit
 import SwiftUI
 
 /// The same board laid out in columns for a large or full-screen window.
-struct FullBoardView: View, SectionHost, Zoomed {
+/// Equatable with no inputs: everything it shows comes from the board and its own state, which SwiftUI tracks on
+/// its own, so a parent re-rendering never needs to re-render it.
+struct FullBoardView: View, SectionHost, Zoomed, Equatable {
+    static func == (lhs: Self, rhs: Self) -> Bool { true }
+
     var zoom: CGFloat { T.zoom * 1.15 }
     @Environment(Board.self) private var board
     @AppStorage("fullCollapsedSections") var collapsedRaw = ""

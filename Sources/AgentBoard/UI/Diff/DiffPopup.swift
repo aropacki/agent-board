@@ -11,11 +11,15 @@ struct DiffPopup: View, Zoomed {
     @State private var toggled: Set<String> = []
     /// Bumped by each line button in the comments pane, so a second click on one thread scrolls back to it.
     @State private var revealed = 0
-    /// The comments pane costs a few frames to build, so it waits out the popup's opening animation.
+    /// The comments pane and the file list's rows cost a few frames to build, so they wait out the popup's opening
+    /// animation.
     @State private var paneReady = false
     @State private var width: CGFloat = 0
     @State private var jump: String?
     @State private var query = ""
+    /// A text field costs tens of milliseconds to build, so the search is a label until it is clicked.
+    @State private var searching = false
+    @FocusState private var searchFocused: Bool
     @State private var scroll = DiffScroll()
 
     var body: some View {
@@ -323,10 +327,17 @@ struct DiffPopup: View, Zoomed {
     func fileList(_ pr: PR, _ files: [DiffFile], notes: [String: (step: Int, note: String?)], threads: [ReviewThread],
                   ghosts: [AgentReview.Comment], jump: @escaping (String) -> Void) -> some View {
         let talk = Dictionary(grouping: threads, by: \.path)
+        let live = searching || !query.isEmpty
         return VStack(spacing: 0) {
             HStack(spacing: z(5)) {
                 Image(systemName: "magnifyingglass").font(.system(size: z(10))).foregroundStyle(T.text3)
-                TextField("Find a file", text: $query).textFieldStyle(.plain).font(ui(11.5)).foregroundStyle(T.text)
+                if live {
+                    TextField("Find a file", text: $query).textFieldStyle(.plain).font(ui(11.5)).foregroundStyle(T.text)
+                        .focused($searchFocused)
+                        .onChange(of: searchFocused) { if !searchFocused && query.isEmpty { searching = false } }
+                } else {
+                    Text("Find a file").font(ui(11.5)).foregroundStyle(T.text3).frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if !query.isEmpty {
                     Button { query = "" } label: { Image(systemName: "xmark.circle.fill").font(.system(size: z(10))).foregroundStyle(T.text3) }
                         .buttonStyle(.plain).pointerOnly()
@@ -334,7 +345,14 @@ struct DiffPopup: View, Zoomed {
             }
             .padding(.horizontal, z(8)).padding(.vertical, z(5))
             .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: z(6), style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: z(6), style: .continuous))
+            .simultaneousGesture(TapGesture().onEnded {
+                searching = true
+                DispatchQueue.main.async { searchFocused = true }
+            }, including: live ? .none : .all)
+            .pointerStyle(live ? nil : .horizontalText)
             .padding([.horizontal, .top], z(8)).padding(.bottom, z(2))
+        if paneReady {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: z(1)) {
                 ForEach(files) { f in
@@ -379,6 +397,10 @@ struct DiffPopup: View, Zoomed {
             .padding(z(6))
         }
         .scrollIndicators(.never)
+        .transition(.opacity)
+        } else {
+            Spacer(minLength: 0)
+        }
         }
         .frame(width: z(250))
     }

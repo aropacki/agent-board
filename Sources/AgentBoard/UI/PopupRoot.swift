@@ -16,24 +16,14 @@ struct PopupRoot: View {
             ZStack {
                 Color.black.opacity(0.32).opacity(presented ? 1 : 0)
                     .contentShape(Rectangle()).onTapGesture { board.dismissPopup() }
-                ZStack {
-                    FullBoardView()
-                        .clipShape(shape)
-                        .overlay(shape.strokeBorder(T.border))
-                        .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
-                        .opacity(board.boardOpen ? 1 : 0)
-                        .allowsHitTesting(board.boardOpen)
-                    if board.diffOpen != nil {
-                        ZStack {
-                            if board.boardOpen {
-                                shape.fill(Color.black.opacity(0.35)).contentShape(shape).onTapGesture { board.closeDiff() }
-                            }
-                            DiffPopup().padding(board.boardOpen ? 28 * zoom : 0)
-                        }
-                        .environment(\.zoom, zoom)
-                        .transition(.pop(from: .center))
-                    }
-                }
+                FullBoardView()
+                    .equatable()
+                    .clipShape(shape)
+                    .overlay(shape.strokeBorder(T.border))
+                    .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+                    .opacity(board.boardOpen ? 1 : 0)
+                    .allowsHitTesting(board.boardOpen)
+                    .overlay { DiffLayer(shape: shape, zoom: zoom) }
                 .frame(width: max(0, card.width), height: max(0, card.height))
                 .modifier(BoardOverlays(barWidth: 520))
                 .scaleEffect(presented || Motion.reduced ? 1 : 0.98)
@@ -46,5 +36,25 @@ struct PopupRoot: View {
         .environment(\.boardSurface, "window")
         .preferredColorScheme(.dark)
         .environment(\.controlActiveState, .key)
+    }
+}
+
+/// Its own view so that opening and closing a diff re-renders only this layer, not the board under it.
+struct DiffLayer: View {
+    @Environment(Board.self) private var board
+    let shape: RoundedRectangle
+    let zoom: CGFloat
+
+    var body: some View {
+        if board.diffOpen != nil {
+            ZStack {
+                if board.boardOpen {
+                    shape.fill(Color.black.opacity(0.35)).contentShape(shape).onTapGesture { board.closeDiff() }
+                }
+                DiffPopup().padding(board.boardOpen ? 28 * zoom : 0)
+            }
+            .environment(\.zoom, zoom)
+            .transition(.pop(from: .center))
+        }
     }
 }
