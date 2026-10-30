@@ -55,6 +55,19 @@ func prIconColor(_ pr: PR, ci: String) -> Color {
     return T.text3
 }
 
+/// Its own view because its color follows CI, which changes whenever any PR's checks load.
+struct PRGlyph: View, Zoomed {
+    @Environment(\.zoom) var zoom
+    @Environment(Board.self) private var board
+    let pr: PR
+
+    var body: some View {
+        Image(systemName: "arrow.triangle.pull")
+            .font(.system(size: z(12), weight: .regular))
+            .foregroundStyle(pr.draft ? T.text3 : prIconColor(pr, ci: board.ci(pr)))
+    }
+}
+
 /// Equatable on its PR: a state update decodes every PR afresh, and SwiftUI can't tell an unchanged one from new.
 struct PRRow: View, Zoomed, Equatable {
     static func == (a: PRRow, b: PRRow) -> Bool { a.pr == b.pr && a.inStack == b.inStack }
@@ -71,8 +84,6 @@ struct PRRow: View, Zoomed, Equatable {
         let agents = pr.agents ?? []
         let selecting = !board.selected.isEmpty
         let picked = board.isSelected(pr)
-        let ctx = board.context(pr: pr)
-        let buttons = board.applicable(on: ctx, buttons: true).filter { !inStack || $0.action.placement(.stack)?.button != true }
         VStack(alignment: .leading, spacing: z(5)) {
         HStack(alignment: .top, spacing: z(8)) {
             ZStack {
@@ -81,9 +92,7 @@ struct PRRow: View, Zoomed, Equatable {
                         .font(.system(size: z(12), weight: .regular))
                         .foregroundStyle(picked ? T.blue : T.text3)
                 } else {
-                    Image(systemName: "arrow.triangle.pull")
-                        .font(.system(size: z(12), weight: .regular))
-                        .foregroundStyle(pr.draft ? T.text3 : prIconColor(pr, ci: board.ci(pr)))
+                    PRGlyph(pr: pr)
                 }
             }
             .frame(width: z(14), height: z(17))
@@ -95,9 +104,7 @@ struct PRRow: View, Zoomed, Equatable {
             RowCorner(owner: "pr:\(pr.key)", time: pr.lastCommit, help: "Last commit")
         }
             if !agents.isEmpty { agentLines(agents) }
-            if !buttons.isEmpty {
-                QuickActionChips(context: ctx, items: buttons).padding(.leading, z(22)).padding(.top, z(2))
-            }
+            RowActions(context: board.context(pr: pr), skipsStackButtons: inStack)
         }
         .padding(z(8))
         .background(RoundedRectangle(cornerRadius: T.rowRadius, style: .continuous).fill(picked ? T.blue.opacity(0.12) : .clear))

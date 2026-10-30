@@ -44,6 +44,9 @@ enum Perf {
         Scenario(name: "panel/state", frames: 120) { s, i in
             if i % 40 == 0 { s.board.present(i % 80 == 0 ? s.data.trimmed : s.data.state) }
         },
+        Scenario(name: "panel/refresh", frames: 80) { s, i in
+            if i % 40 == 0 { s.board.present(i % 80 == 0 ? s.data.restamped : s.data.state) }
+        },
         Scenario(name: "panel/checks", frames: 60) { s, i in
             let prs = s.data.allPRs
             for pr in (0..<6).map({ prs[(i * 6 + $0) % prs.count] }) {

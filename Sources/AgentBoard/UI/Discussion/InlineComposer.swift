@@ -104,6 +104,23 @@ struct InlineComposer: View, Zoomed {
     }
 }
 
+/// A board row's action buttons. Which ones apply depends on CI, and loading any PR's checks changes that,
+/// so they are worked out here rather than in the row, which would then re-render on every load.
+struct RowActions: View, Zoomed {
+    @Environment(\.zoom) var zoom
+    @Environment(Board.self) private var board
+    let context: ActionContext
+    var skipsStackButtons = false
+
+    var body: some View {
+        let buttons = board.applicable(on: context, buttons: true)
+            .filter { !skipsStackButtons || $0.action.placement(.stack)?.button != true }
+        if !buttons.isEmpty {
+            QuickActionChips(context: context, items: buttons).padding(.leading, z(22)).padding(.top, z(2))
+        }
+    }
+}
+
 /// The actions that are buttons on a row, in the user's order.
 struct QuickActionChips: View, Zoomed {
     @Environment(\.zoom) var zoom

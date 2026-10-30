@@ -5,6 +5,8 @@ struct Fixtures {
     let state: BoardState
     /// `state` minus its first card, for scenarios that swap state back and forth.
     let trimmed: BoardState
+    /// `state` decoded again a refresh later: the same content, a newer stamp.
+    let restamped: BoardState
     let diffPR: PR
     let diff: PRDiff
     let discussion: PRDiscussion
@@ -81,6 +83,10 @@ struct Fixtures {
         let copy = Self.boardState(&again, now: now, repo: repo)
         trimmed = BoardState(generatedAt: now, cards: Array(copy.cards.dropFirst()), looseSlots: copy.looseSlots, prs: copy.prs,
                              prsFetchedAt: now)
+        var third = start
+        let same = Self.boardState(&third, now: now, repo: repo)
+        restamped = BoardState(generatedAt: now + 15, cards: same.cards, looseSlots: same.looseSlots, prs: same.prs,
+                               prsFetchedAt: now)
         let mine = state.prs?.mine ?? []
         diffPR = mine[0]
 

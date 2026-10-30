@@ -80,8 +80,6 @@ struct CardView: View, Zoomed, Equatable {
     var body: some View {
         let openKey = "open-\(card.id)"
         let shown = showAllPRs ? card.prs : Array(card.prs.prefix(visiblePRs))
-        let ctx = board.context(card: card)
-        let buttons = board.applicable(on: ctx, buttons: true)
         let _ = Probe.on ? Probe.rows[probeID] = (card.id, sectionName, card.dotStatus, card.needsYou) : ()
         VStack(alignment: .leading, spacing: z(5)) {
             HStack(alignment: .top, spacing: z(8)) {
@@ -138,7 +136,7 @@ struct CardView: View, Zoomed, Equatable {
                 .padding(.leading, showChats ? z(9) : z(16))
             }
 
-            if !buttons.isEmpty { QuickActionChips(context: ctx, items: buttons).padding(.leading, z(22)).padding(.top, z(2)) }
+            RowActions(context: board.context(card: card))
         }
         .padding(z(8))
         .rowSurface(resting: true)
