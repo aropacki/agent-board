@@ -23,11 +23,6 @@ extension AnyTransition {
     /// A view one level deeper: in from the trailing edge, back out to it.
     static var push: AnyTransition { slide(.trailing) }
 
-    /// The view a push covers: it eases a little toward the leading edge as it fades.
-    static var pushed: AnyTransition {
-        Motion.reduced ? .opacity : .offset(x: -z(24)).combined(with: .opacity)
-    }
-
     /// A list row: settles in from just above, and fades as it leaves.
     static var row: AnyTransition {
         .asymmetric(insertion: Motion.reduced ? .opacity : .offset(y: -z(4)).combined(with: .opacity), removal: .opacity)

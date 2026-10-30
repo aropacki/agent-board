@@ -27,6 +27,10 @@ struct DiscussionView: View, Zoomed {
     /// Authors switched off in the filter chips, shared by both tabs and kept across PRs.
     @AppStorage("hiddenCommentAuthors") private var hiddenRaw = ""
     @State private var openResolved: Set<String> = []
+    /// Threads cost a few milliseconds each to build, so the first frame draws only the ones the pane opens on,
+    /// at the bottom, and the rest wait out the opening animation.
+    @State private var settled = false
+    let firstScreen = 4
 
     var hiddenAuthors: Set<String> { Set(hiddenRaw.split(separator: ",").map(String.init)) }
 
@@ -95,6 +99,10 @@ struct DiscussionView: View, Zoomed {
             board.composing = drafts.values.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }
         .onDisappear { board.composing = false }
+        .task {
+            try? await Task.sleep(for: .milliseconds(260))
+            settled = true
+        }
     }
 
     @ViewBuilder func rows(_ d: PRDiscussion?, _ current: Tab, _ threads: [ReviewThread], _ shownThreads: [ReviewThread],
@@ -109,7 +117,7 @@ struct DiscussionView: View, Zoomed {
             switch current {
             case .comments:
                 if threads.isEmpty { note("No review threads.") } else if shownThreads.isEmpty { note("Every author is filtered out.") }
-                ForEach(shownThreads) { t in
+                ForEach(settled ? shownThreads : Array(shownThreads.suffix(firstScreen))) { t in
                     if t.resolved && !openResolved.contains(t.id) {
                         ResolvedThreadRow(thread: t) { withAnimation(.snappy(duration: 0.15)) { _ = openResolved.insert(t.id) } }
                     } else {
@@ -118,7 +126,7 @@ struct DiscussionView: View, Zoomed {
                 }
             case .conversation:
                 if talk.isEmpty { note("No comments yet.") } else if shownTalk.isEmpty { note("Every author is filtered out.") }
-                ForEach(shownTalk) { conversationComment($0) }
+                ForEach(settled ? shownTalk : Array(shownTalk.suffix(firstScreen))) { conversationComment($0) }
             }
         }
     }

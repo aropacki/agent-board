@@ -72,8 +72,8 @@ enum Perf {
         Scenario(name: "board/state", surface: .popup, frames: 120, setup: { b, _ in b.boardOpen = true }) { s, i in
             if i % 40 == 0 { s.board.present(i % 80 == 0 ? s.data.trimmed : s.data.state) }
         },
-        Scenario(name: "discussion/open", frames: 80) { s, i in
-            if i % 40 == 0 { s.board.discussion = (s.data.diffPR.key, "panel") } else if i % 40 == 20 { s.board.discussion = nil }
+        Scenario(name: "discussion/open", frames: 120) { s, i in
+            if i % 60 == 0 { s.board.discussion = (s.data.diffPR.key, "panel") } else if i % 60 == 40 { s.board.discussion = nil }
         },
         Scenario(name: "discussion/scroll", frames: 240, scrolls: true, snapAt: 31,
                  setup: { b, d in b.discussion = (d.diffPR.key, "panel") }) { s, i in s.sweep(i) },
@@ -116,9 +116,10 @@ enum Perf {
         /// Millions of instructions the process retired in a frame, p95. Unlike time, it does not move with the
         /// clock speed or with which core ran the frame, so it is the steady number to compare two builds by.
         let minst95: Double
+        let minstMax: Double
 
         var tsv: String {
-            [name, f(p50), f(p95), f(max), f(cold), "\(miss120)", "\(miss60)", reflow.map(String.init) ?? "-", f(late95), f(minst95)]
+            [name, f(p50), f(p95), f(max), f(cold), "\(miss120)", "\(miss60)", reflow.map(String.init) ?? "-", f(late95), f(minst95), f(minstMax)]
                 .joined(separator: "\t")
         }
     }
@@ -149,7 +150,7 @@ enum Perf {
         print("main-thread ms per frame; budget 8.3 at 120 Hz. cold = worst frame of the first round. PNGs in \(out.path)/")
         print("late = p95 ms a frame ran past its 8.3 ms slot, counting time the main thread waited for a core."
               + (load > 0 ? " \(load) busy threads compete for the cores." : ""))
-        print(pad("scenario", 14) + ["p50", "p95", "max", "cold", ">8ms", ">16ms", "reflow", "late", "Minst"].map { lpad($0, 7) }.joined()
+        print(pad("scenario", 14) + ["p50", "p95", "max", "cold", ">8ms", ">16ms", "reflow", "late", "Minst", "Mmax"].map { lpad($0, 7) }.joined()
               + "   vs baseline")
         var results: [Result] = []
         for s in picked {
@@ -158,10 +159,10 @@ enum Perf {
             Bench.spin(0.1)
             results.append(r)
             var line = pad(r.name, 14) + [f(r.p50), f(r.p95), f(r.max), f(r.cold), "\(r.miss120)", "\(r.miss60)",
-                                           r.reflow.map(String.init) ?? "-", f(r.late95), f(r.minst95)].map { lpad($0, 7) }.joined()
+                                           r.reflow.map(String.init) ?? "-", f(r.late95), f(r.minst95), f(r.minstMax)].map { lpad($0, 7) }.joined()
             if let b = baseline[r.name] {
                 line += "   p95 \(delta(r.p95, b.p95))  max \(delta(r.max, b.max))  cold \(delta(r.cold, b.cold))"
-                    + "  late \(delta(r.late95, b.late95))  Minst \(delta(r.minst95, b.minst95))"
+                    + "  late \(delta(r.late95, b.late95))  Minst \(delta(r.minst95, b.minst95))  Mmax \(delta(r.minstMax, b.minstMax))"
             }
             print(line)
         }
@@ -213,6 +214,7 @@ enum Perf {
         if !blocked.isEmpty { print("  \(s.name) tried to run, so seed what it fetched: \(blocked.sorted().joined(separator: "; "))") }
         if ProcessInfo.processInfo.environment["BENCH_FRAMES"] != nil {
             print("  \(s.name) frames: " + (warm.isEmpty ? cold : warm).prefix(s.frames).map(f).joined(separator: " "))
+            print("  \(s.name) Minst: " + insts.prefix(s.frames).map { String(format: "%.0f", $0) }.joined(separator: " "))
         }
         let frames = (warm.isEmpty ? cold : warm).sorted()
         let perRound = Double(max(1, rounds - 1))
@@ -223,7 +225,8 @@ enum Perf {
                       miss60: Int((Double(frames.filter { $0 > 16.7 }.count) / perRound).rounded()),
                       reflow: s.scrolls ? reflow : nil,
                       late95: lateSorted.isEmpty ? 0 : lateSorted[min(lateSorted.count - 1, lateSorted.count * 95 / 100)],
-                      minst95: instSorted.isEmpty ? 0 : instSorted[min(instSorted.count - 1, instSorted.count * 95 / 100)])
+                      minst95: instSorted.isEmpty ? 0 : instSorted[min(instSorted.count - 1, instSorted.count * 95 / 100)],
+                      minstMax: instSorted.last ?? 0)
     }
 
     /// Loops one scenario long enough for `sample` to attach; `make perf-profile` runs both.
@@ -284,7 +287,7 @@ enum Perf {
             guard c.count >= 8, let p50 = Double(c[1]), let p95 = Double(c[2]), let mx = Double(c[3]), let cold = Double(c[4]) else { continue }
             out[c[0]] = Result(name: c[0], p50: p50, p95: p95, max: mx, cold: cold, miss120: Int(c[5]) ?? 0, miss60: Int(c[6]) ?? 0,
                                reflow: Int(c[7]), late95: c.count > 8 ? Double(c[8]) ?? 0 : 0,
-                               minst95: c.count > 9 ? Double(c[9]) ?? 0 : 0)
+                               minst95: c.count > 9 ? Double(c[9]) ?? 0 : 0, minstMax: c.count > 10 ? Double(c[10]) ?? 0 : 0)
         }
         return out
     }

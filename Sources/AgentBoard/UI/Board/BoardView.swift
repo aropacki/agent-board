@@ -21,16 +21,10 @@ struct BoardView: View, SectionHost, Zoomed {
             header(l)
             Rectangle().fill(T.border).frame(height: 1)
 
-            if let open = board.discussion, open.surface == "panel", let pr = board.pr(key: open.key) {
-                DiscussionView(pr: pr).menuViewport("discussion").transition(.push)
-            } else if let open = board.checksOpen, open.surface == "panel", let pr = board.pr(key: open.key) {
-                ChecksView(pr: pr).menuViewport("checks").transition(.push)
-            } else if showActivity {
-                ScrollView { ActivityList().padding(.horizontal, z(6)).padding(.bottom, z(60)) }
-                    .scrollIndicators(.never)
-                    .menuViewport("activity")
-                    .transition(.push)
-            } else {
+            let discussionPR = board.discussion.flatMap { $0.surface == "panel" ? board.pr(key: $0.key) : nil }
+            let checksPR = board.checksOpen.flatMap { $0.surface == "panel" ? board.pr(key: $0.key) : nil }
+            let covered = discussionPR != nil || checksPR != nil || showActivity
+            ZStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: z(2)) {
                     if !board.trusted { PermissionCard() }
@@ -56,7 +50,21 @@ struct BoardView: View, SectionHost, Zoomed {
             .scrollIndicators(.never)
             .holdsRefreshWhileScrolling()
             .menuViewport("main")
-            .transition(.pushed)
+            .offset(x: covered && !Motion.reduced ? -z(24) : 0)
+            .opacity(covered ? 0 : 1)
+            .allowsHitTesting(!covered)
+            .accessibilityHidden(covered)
+
+            if let pr = discussionPR {
+                DiscussionView(pr: pr).menuViewport("discussion").transition(.push)
+            } else if let pr = checksPR {
+                ChecksView(pr: pr).menuViewport("checks").transition(.push)
+            } else if showActivity {
+                ScrollView { ActivityList().padding(.horizontal, z(6)).padding(.bottom, z(60)) }
+                    .scrollIndicators(.never)
+                    .menuViewport("activity")
+                    .transition(.push)
+            }
             }
         }
         .background(T.surface)

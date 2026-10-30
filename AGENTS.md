@@ -27,6 +27,9 @@ The loop for a perf change:
 Columns are main-thread ms per frame. The 120 Hz budget is 8.3 ms. `cold` is the worst frame of the first pass,
 which includes first layout. `reflow` counts frames where the scroll height changed, which shows as a jump.
 `late` is wall-clock ms a frame ran past its slot, so it also counts time the main thread waited for a core.
+`Minst` and `Mmax` are the p95 and worst frame in millions of instructions retired. Timings swing about 2x as the
+main thread moves between performance and efficiency cores; instruction counts hold steady, so compare builds on
+them. In a scenario where the costly event is a few frames out of many, p95 lands beside the event, so read `Mmax`.
 `make perf LOAD=10` runs ten busy threads alongside and compares against its own baseline, for how the board
 holds up on a machine running hard.
 A line that says a scenario "tried to run" means a fetch leaked into it: seed that cache in `Fixtures.seed`.
