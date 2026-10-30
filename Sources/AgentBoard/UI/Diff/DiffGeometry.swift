@@ -120,7 +120,7 @@ func patchStamp(_ lines: [DiffLine]) -> String {
 
 /// Row ranges a file draws as separate lazy pieces, so a long file builds only the rows on screen.
 /// A piece runs at least `size` rows, ends at a hunk header when one is near, and never splits a note's rows.
-func diffChunks(_ count: Int, hunkStarts: Set<Int>, spans: [ClosedRange<Int>], size: Int = 60) -> [Range<Int>] {
+func diffChunks(_ count: Int, hunkStarts: Set<Int>, spans: [ClosedRange<Int>], size: Int = 20) -> [Range<Int>] {
     guard count > 0 else { return [] }
     var covered = Array(repeating: false, count: count)
     for s in spans where s.lowerBound < s.upperBound {
