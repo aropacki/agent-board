@@ -180,6 +180,17 @@ extension Bench {
               single == ["api", "repos/o/r/pulls/7/comments", "-f", "body=Why?", "-f", "commit_id=abc", "-f", "path=a.ts", "-F", "line=11", "-f", "side=RIGHT"]
               && ranged.suffix(8) == ["-F", "line=12", "-f", "side=RIGHT", "-F", "start_line=11", "-f", "start_side=LEFT"]
               && reviewCommentArgs(commentPR, sha: "abc", path: "a.ts", lines: [patch[0]], body: "x") == nil)
+        let target = ["7", "--repo", "o/r"]
+        check("pr commands: a merge names its method and the head it was shown, a queue merge names no method, and the rest target the PR",
+              prCommandArgs(commentPR, .merge(.squash, auto: false), headSha: "abc")
+                == ["pr", "merge"] + target + ["--squash", "--match-head-commit", "abc"]
+              && prCommandArgs(commentPR, .merge(.rebase, auto: true), headSha: "abc")
+                == ["pr", "merge"] + target + ["--rebase", "--auto", "--match-head-commit", "abc"]
+              && prCommandArgs(commentPR, .merge(nil, auto: false), headSha: "abc") == ["pr", "merge"] + target + ["--match-head-commit", "abc"]
+              && prCommandArgs(commentPR, .disableAuto, headSha: "abc") == ["pr", "merge"] + target + ["--disable-auto"]
+              && prCommandArgs(commentPR, .ready, headSha: "abc") == ["pr", "ready"] + target
+              && prCommandArgs(commentPR, .draft, headSha: "abc") == ["pr", "ready"] + target + ["--undo"]
+              && prCommandArgs(commentPR, .updateBranch, headSha: "abc") == ["pr", "update-branch"] + target)
         let file = DiffFile(path: "a.ts", previousPath: nil, status: "modified", additions: 3, deletions: 1, lines: patch, generated: false)
         let touched = DiffFile(path: "a.ts", previousPath: nil, status: "modified", additions: 3, deletions: 1,
                                lines: parsePatch("@@ -10,4 +10,5 @@ func a() {\n ctx\n-old\n+newer\n+more\n ctx2"), generated: false)

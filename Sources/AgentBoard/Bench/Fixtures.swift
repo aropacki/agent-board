@@ -8,6 +8,7 @@ struct Fixtures {
     let diffPR: PR
     let diff: PRDiff
     let discussion: PRDiscussion
+    let overview: PROverview
     let review: AgentReview
     let checks: [CICheck]
 
@@ -29,6 +30,7 @@ struct Fixtures {
         }
         board.diffs[diffPR.key] = diff
         board.discussions[diffPR.key] = discussion
+        board.overviews[diffPR.key] = overview
         board.reviews[reviewFileName(diffPR)] = review
     }
 
@@ -115,6 +117,45 @@ struct Fixtures {
                           at: at.addingTimeInterval(Double(c * 900)))
         }
         discussion = PRDiscussion(threads: threads, conversation: conversation)
+        overview = PROverview(
+            body: """
+            ## Summary
+
+            Fetch the index **once** per panel and reuse it, so a scroll no longer refetches. See `IndexCache`.
+
+            - Moves the fetch into `PanelIndex`
+              and keeps the old call as a thin wrapper
+            - Drops the second request on open
+              1. nested step one
+              2. nested step two
+
+            ## Test plan
+
+            - [x] Unit tests for the cache key
+            - [x] Scrolled a 2k-row panel
+            - [ ] Rollout behind the flag
+
+            > [!NOTE]
+            > The flag defaults off.
+
+            | Case | Before | After |
+            | --- | --- | --- |
+            | open | 2 requests | 1 request |
+            | scroll | 1 per page | 0 |
+
+            ```swift
+            let index = cache.index(for: panel)
+            ```
+            """,
+            state: "OPEN", draft: false, author: "me", createdAt: at, base: "master", head: "me/index-cache",
+            headSha: "perf", additions: 3920, deletions: 2382, files: 36, commits: 4, mergeable: "MERGEABLE", mergeState: "BLOCKED",
+            decision: "REVIEW_REQUIRED", queueEnabled: false, queued: false, queuePosition: nil, autoMerge: nil, autoMergeBy: nil,
+            canUpdateBranch: true,
+            labels: [PROverview.Label(name: "perf", color: "0e8a16"), PROverview.Label(name: "needs-review", color: "fbca04")],
+            reviewers: [PROverview.Reviewer(login: "dana", state: "COMMENTED", team: false),
+                        PROverview.Reviewer(login: "lee", state: "REQUESTED", team: false),
+                        PROverview.Reviewer(login: "platform", state: "REQUESTED", team: true)],
+            methods: [.squash, .merge], defaultMethod: .squash, autoMergeAllowed: true)
 
         var drafts: [AgentReview.Comment] = []
         for i in 0..<10 {

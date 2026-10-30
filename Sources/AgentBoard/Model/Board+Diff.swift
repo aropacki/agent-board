@@ -14,6 +14,7 @@ extension Board {
             presentPopup()
         }
         if diffs[pr.key] == nil { loadDiff(pr) }
+        loadOverview(pr)
     }
 
     func isReviewed(_ pr: PR, _ f: DiffFile) -> Bool { reviewedFiles[pr.key]?[f.path] == f.stamp }

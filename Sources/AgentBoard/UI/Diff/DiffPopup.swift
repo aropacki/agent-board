@@ -7,6 +7,7 @@ struct DiffPopup: View, Zoomed {
     @Environment(Board.self) private var board
     @AppStorage("diffShowGenerated") private var showGenerated = false
     @AppStorage("diffCommentsOpen") private var showComments = true
+    @AppStorage("diffPage") private var page = DiffPage.files
     @State private var toggled: Set<String> = []
     /// Bumped by each line button in the comments pane, so a second click on one thread scrolls back to it.
     @State private var revealed = 0
@@ -22,6 +23,7 @@ struct DiffPopup: View, Zoomed {
             card(pr, target)
                 .onChange(of: board.diffDraft) { board.composing = !board.diffDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .onDisappear { board.composing = false }
+                .onChange(of: target, initial: true) { _, t in if t.path != nil || t.thread != nil { page = .files } }
                 .task {
                     guard (try? await Task.sleep(for: .milliseconds(260))) != nil else { return }
                     withAnimation(Motion.content) { paneReady = true }
@@ -133,18 +135,20 @@ struct DiffPopup: View, Zoomed {
         return VStack(spacing: 0) {
             header(pr, files, shown: shown, counted: unfiltered)
             Rectangle().fill(T.border).frame(height: 1)
-            if diff == nil {
-                VStack(spacing: z(8)) {
-                    if let error = board.diffErrors[pr.key] {
-                        Text(error).font(ui(12)).foregroundStyle(T.text3).multilineTextAlignment(.center)
-                        QuietButton(title: "Try again", icon: "arrow.clockwise") { board.loadDiff(pr, explicit: true) }
-                    } else {
-                        ProgressView().controlSize(.small)
+            HStack(spacing: 0) {
+                if page == .overview {
+                    PROverviewPage(pr: pr).frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if diff == nil {
+                    VStack(spacing: z(8)) {
+                        if let error = board.diffErrors[pr.key] {
+                            Text(error).font(ui(12)).foregroundStyle(T.text3).multilineTextAlignment(.center)
+                            QuietButton(title: "Try again", icon: "arrow.clockwise") { board.loadDiff(pr, explicit: true) }
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                HStack(spacing: 0) {
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                     if width > z(760) + (showComments ? z(380) : 0) {
                         fileList(pr, shown, notes: notes, threads: threads, ghosts: ghosts) { jump = $0 }
                         Rectangle().fill(T.border).frame(width: 1)
@@ -212,23 +216,23 @@ struct DiffPopup: View, Zoomed {
                             await reveal(target, shown, pr, threads: threads, ghosts: ghosts, proxy)
                         }
                     }
-                    if showComments {
-                        HStack(spacing: 0) {
-                            Rectangle().fill(T.border).frame(width: 1)
-                            ZStack {
-                                if paneReady {
-                                    DiscussionView(pr: pr) { t in
-                                        board.diffOpen = DiffTarget(key: pr.key, path: t.path, line: t.line, thread: t.id)
-                                        revealed += 1
-                                    }
-                                    .transition(.opacity)
+                }
+                if showComments {
+                    HStack(spacing: 0) {
+                        Rectangle().fill(T.border).frame(width: 1)
+                        ZStack {
+                            if paneReady {
+                                DiscussionView(pr: pr) { t in
+                                    board.diffOpen = DiffTarget(key: pr.key, path: t.path, line: t.line, thread: t.id)
+                                    revealed += 1
                                 }
+                                .transition(.opacity)
                             }
-                            .frame(width: z(380))
-                            .frame(maxHeight: .infinity)
                         }
-                        .transition(.slide(.trailing))
+                        .frame(width: z(380))
+                        .frame(maxHeight: .infinity)
                     }
+                    .transition(.slide(.trailing))
                 }
             }
         }
@@ -260,10 +264,19 @@ struct DiffPopup: View, Zoomed {
                         Text(verbatim: "\(reviewed)/\(counted.count) reviewed").font(ui(11))
                             .foregroundStyle(reviewed == counted.count ? T.green.opacity(0.9) : T.text3)
                     }
-                    if width > z(900) { Text("Drag across lines to comment").font(ui(11)).foregroundStyle(T.text3.opacity(0.8)) }
+                    if page == .files && width > z(1000) {
+                        Text("Drag across lines to comment").font(ui(11)).foregroundStyle(T.text3.opacity(0.8))
+                    }
                 }
             }
             Spacer(minLength: z(6))
+            HStack(spacing: z(2)) {
+                ToggleChip(title: "Overview", icon: "doc.text", on: page == .overview) { page = .overview }
+                ToggleChip(title: files.isEmpty ? "Files" : "Files \(files.count)", icon: "doc.on.doc", on: page == .files) {
+                    page = .files
+                }
+            }
+            Rectangle().fill(T.border).frame(width: 1, height: z(14))
             if board.review(for: pr) == nil, let item = board.reviewActions(pr).first {
                 QuietButton(title: item.action.title, icon: "sparkles") { board.run(item.action, board.context(pr: pr), targets: item.targets) }
                     .help("Run “\(item.action.title)”; its findings show here as drafts")
@@ -273,23 +286,35 @@ struct DiffPopup: View, Zoomed {
                 withAnimation(Motion.content) { showComments.toggle() }
             }
             .help(showComments ? "Hide the comments" : "Read the comments beside the diff")
-            if generated > 0 {
+            if page == .files && generated > 0 {
                 ToggleChip(title: "Generated \(generated)", icon: showGenerated ? "eye" : "eye.slash", on: showGenerated) {
                     withAnimation(.snappy(duration: 0.15)) { showGenerated.toggle() }
                 }
                 .help(showGenerated ? "Hide lockfiles, codegen output, and snapshots" : "Show lockfiles, codegen output, and snapshots")
             }
-            DrawerIconButton(icon: allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical",
-                             help: allFolded ? "Expand all files" : "Collapse all files") { setAllFolded(!allFolded, files, pr) }
-            Button { board.loadDiff(pr, explicit: true) } label: {
+            if page == .files {
+                DrawerIconButton(icon: allFolded ? "rectangle.expand.vertical" : "rectangle.compress.vertical",
+                                 help: allFolded ? "Expand all files" : "Collapse all files") { setAllFolded(!allFolded, files, pr) }
+            }
+            Button {
+                board.loadDiff(pr, explicit: true)
+                board.loadOverview(pr, explicit: true)
+                board.loadChecks(pr, explicit: true)
+            } label: {
                 ZStack {
-                    if board.diffLoading.contains(pr.key) { ProgressView().controlSize(.mini) } else { Image(systemName: "arrow.clockwise") }
+                    if board.diffLoading.contains(pr.key) || board.overviewLoading.contains(pr.key) {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
                 }
                 .font(.system(size: z(11), weight: .medium)).foregroundStyle(T.text2).frame(width: z(16), height: z(16))
             }
             .buttonStyle(HoverButtonStyle.icon).pointerOnly()
             .help("Reload")
-            DrawerIconButton(icon: "arrow.up.forward.square", help: "Open Files changed on GitHub") { board.openLink(pr.url + "/files") }
+            DrawerIconButton(icon: "arrow.up.forward.square", help: page == .files ? "Open Files changed on GitHub" : "Open the PR on GitHub") {
+                board.openLink(page == .files ? pr.url + "/files" : pr.url)
+            }
             DrawerIconButton(icon: "xmark", help: "Close (Esc)") { board.closeDiff() }
         }
         .padding(.horizontal, z(12)).padding(.vertical, z(9))
@@ -357,6 +382,10 @@ struct DiffPopup: View, Zoomed {
         }
         .frame(width: z(250))
     }
+}
+
+enum DiffPage: String {
+    case overview, files
 }
 
 /// Every space-separated term appears in the path, case-insensitively.

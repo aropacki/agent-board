@@ -21,6 +21,7 @@ enum Bench {
     }
 
     static func run() {
+        UserDefaults.standard.set(ProcessInfo.processInfo.environment["BENCH_PAGE"] ?? DiffPage.files.rawValue, forKey: "diffPage")
         let modes = ["BENCH_LOGIC", "BENCH_CONSISTENCY", "BENCH_MENUAUDIT", "BENCH_FULL", "BENCH_SNAP", "BENCH_TICKER"]
         guard modes.contains(where: { ProcessInfo.processInfo.environment[$0] != nil }) else {
             Perf.run()
@@ -91,6 +92,10 @@ enum Bench {
                 let pick = (env["BENCH_DIFF_SELECT"] ?? "").split(separator: "|").map(String.init)
                 if pick.count == 3, let a = Int(pick[1]), let b = Int(pick[2]) { board.diffSelection = DiffSelection(path: pick[0], anchor: a, head: b) }
             }
+        }
+        if let file = ProcessInfo.processInfo.environment["BENCH_OVERVIEW"], let data = FileManager.default.contents(atPath: file),
+           let key = board.diffOpen?.key {
+            board.overviews[key] = parseOverview(data)
         }
         if let file = ProcessInfo.processInfo.environment["BENCH_CHECKS"],
            let data = FileManager.default.contents(atPath: file),

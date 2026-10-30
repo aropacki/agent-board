@@ -100,6 +100,11 @@ enum Perf {
             let key = t.path + "|t-" + t.id
             if i % 2 == 0 { s.board.diffOpenNotes.insert(key) } else { s.board.diffOpenNotes.remove(key) }
         },
+        // Last, since it leaves the popup on the overview page.
+        Scenario(name: "diff/overview", surface: .popup, frames: 120, scrolls: true, snapAt: 1, setup: { b, d in
+            UserDefaults.standard.set(DiffPage.overview.rawValue, forKey: "diffPage")
+            b.diffOpen = d.target
+        }) { s, i in s.sweep(i) },
     ]
 
     struct Result {

@@ -72,6 +72,9 @@ final class Board {
     var diffs: [String: PRDiff] = [:]
     var diffLoading: Set<String> = []
     var diffErrors: [String: String] = [:]
+    var overviews: [String: PROverview] = [:]
+    var overviewLoading: Set<String> = []
+    var overviewErrors: [String: String] = [:]
     var diffSelection: DiffSelection?
     /// A drag is picking lines, so the comment box waits until it ends.
     var diffDragging = false

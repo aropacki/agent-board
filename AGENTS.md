@@ -42,7 +42,7 @@ the same animation, and space its steps wider than that animation so each frame 
 | Variable | Use |
 |---|---|
 | `BENCH_LOGIC=1`, `BENCH_CONSISTENCY=1`, `BENCH_MENUAUDIT=1` | The checks that `make test` runs. |
-| `BENCH_FULL=<file.png>` | Screenshot of the full board. Add `BENCH_DIFF*`, `BENCH_DISCUSSION*`, or `BENCH_CHECKS*` to open those views from fixture files. |
+| `BENCH_FULL=<file.png>` | Screenshot of the full board. Add `BENCH_DIFF*`, `BENCH_DISCUSSION*`, or `BENCH_CHECKS*` to open those views from fixture files. With `BENCH_DIFF`, `BENCH_OVERVIEW=<graphql.json>` fills the overview and `BENCH_PAGE=overview` shows it. |
 | `BENCH_SNAP=<file.png>`, `BENCH_TICKER=<file.png>` | Screenshots of a row menu and of the ticker. |
 
 ## Rules

@@ -40,6 +40,90 @@ func flattenMarkdownBlocks(_ text: String) -> String {
     }.joined(separator: "\n")
 }
 
+struct MarkdownItem: Equatable {
+    let indent: Int
+    /// "•" or the number with its dot; empty for a task, which shows its box instead.
+    let marker: String
+    let done: Bool?
+    var text: String
+}
+
+enum MarkdownBlock: Equatable {
+    case heading(Int, String)
+    case paragraph(String)
+    case list([MarkdownItem])
+    case quote(String)
+    case code(lang: String, text: String)
+    case table([[String]])
+    case rule
+}
+
+/// A document's block structure, for text long enough that flattening it to one run would lose its shape.
+func markdownBlocks(_ body: String) -> [MarkdownBlock] {
+    var out: [MarkdownBlock] = []
+    for part in commentBlocks(body) {
+        if part.code { out.append(.code(lang: part.lang, text: part.text)); continue }
+        let lines = part.text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var paragraph: [String] = [], quote: [String] = [], items: [MarkdownItem] = []
+        func flush() {
+            if !paragraph.isEmpty { out.append(.paragraph(paragraph.joined(separator: "\n"))); paragraph = [] }
+            if !quote.isEmpty { out.append(.quote(quote.joined(separator: "\n"))); quote = [] }
+            if !items.isEmpty { out.append(.list(items)); items = [] }
+        }
+        func cells(_ line: String) -> [String] {
+            var s = line.trimmingCharacters(in: .whitespaces)
+            if s.hasPrefix("|") { s.removeFirst() }
+            if s.hasSuffix("|") { s.removeLast() }
+            return s.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        var i = 0
+        while i < lines.count {
+            let line = lines[i], trimmed = line.trimmingCharacters(in: .whitespaces)
+            defer { i += 1 }
+            if trimmed.isEmpty { flush(); continue }
+            if let r = trimmed.range(of: "^#{1,6}\\s+", options: .regularExpression) {
+                flush()
+                out.append(.heading(trimmed[..<r.upperBound].filter { $0 == "#" }.count, String(trimmed[r.upperBound...])))
+                continue
+            }
+            if trimmed.range(of: "^([-*_])(\\s*\\1){2,}$", options: .regularExpression) != nil { flush(); out.append(.rule); continue }
+            if trimmed.contains("|"), i + 1 < lines.count,
+               lines[i + 1].range(of: "^\\s*\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)*\\|?\\s*$", options: .regularExpression) != nil {
+                flush()
+                var rows = [cells(line)]
+                i += 2
+                while i < lines.count, lines[i].contains("|") { rows.append(cells(lines[i])); i += 1 }
+                i -= 1
+                out.append(.table(rows))
+                continue
+            }
+            if trimmed.hasPrefix(">") {
+                if quote.isEmpty { flush() }
+                let text = trimmed.replacingOccurrences(of: "^>\\s?", with: "", options: .regularExpression)
+                if text.range(of: "^\\[![A-Za-z]+\\]$", options: .regularExpression) == nil { quote.append(text) }
+                continue
+            }
+            let pattern = "^(\\s*)([-*+]|\\d+[.)])\\s+(\\[([ xX])\\]\\s+)?(.*)$"
+            if let m = try? NSRegularExpression(pattern: pattern).firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
+                if items.isEmpty { flush() }
+                func group(_ n: Int) -> String? { Range(m.range(at: n), in: line).map { String(line[$0]) } }
+                let marker = group(2) ?? "-", box = group(4)
+                items.append(MarkdownItem(indent: (group(1) ?? "").count / 2, marker: box != nil ? "" : marker.first?.isNumber == true ? marker : "•",
+                                          done: box.map { $0 != " " }, text: group(5) ?? ""))
+                continue
+            }
+            if !items.isEmpty, line.first?.isWhitespace == true {
+                items[items.count - 1].text += " " + trimmed
+                continue
+            }
+            if !items.isEmpty || !quote.isEmpty { flush() }
+            paragraph.append(line)
+        }
+        flush()
+    }
+    return out
+}
+
 func inlineMarkdown(_ text: String) -> AttributedString {
     let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
     return (try? AttributedString(markdown: flattenMarkdownBlocks(text), options: options)) ?? AttributedString(text)
