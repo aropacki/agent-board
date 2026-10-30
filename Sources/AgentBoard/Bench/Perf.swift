@@ -72,6 +72,11 @@ enum Perf {
         Scenario(name: "board/state", surface: .popup, frames: 120, setup: { b, _ in b.boardOpen = true }) { s, i in
             if i % 40 == 0 { s.board.present(i % 80 == 0 ? s.data.trimmed : s.data.state) }
         },
+        Scenario(name: "discussion/open", frames: 80) { s, i in
+            if i % 40 == 0 { s.board.discussion = (s.data.diffPR.key, "panel") } else if i % 40 == 20 { s.board.discussion = nil }
+        },
+        Scenario(name: "discussion/scroll", frames: 240, scrolls: true, snapAt: 31,
+                 setup: { b, d in b.discussion = (d.diffPR.key, "panel") }) { s, i in s.sweep(i) },
         Scenario(name: "diff/open", surface: .popup, frames: 20) { s, i in s.board.diffOpen = i % 2 == 0 ? s.data.target : nil },
         Scenario(name: "diff/scroll", surface: .popup, frames: 240, scrolls: true, snapAt: 31,
                  setup: { b, d in b.diffOpen = d.target }) { s, i in s.sweep(i) },
@@ -91,7 +96,8 @@ enum Perf {
             s.board.diffSelection = DiffSelection(path: s.data.bigFile.path, anchor: 1 + i % 8, head: 1 + i % 8)
         },
         Scenario(name: "diff/note", surface: .popup, frames: 40, setup: { b, d in b.diffOpen = d.target }) { s, i in
-            let key = s.data.bigFile.path + "|" + (s.data.discussion.threads.first?.id ?? "")
+            let t = s.data.discussion.threads[0]
+            let key = t.path + "|t-" + t.id
             if i % 2 == 0 { s.board.diffOpenNotes.insert(key) } else { s.board.diffOpenNotes.remove(key) }
         },
     ]

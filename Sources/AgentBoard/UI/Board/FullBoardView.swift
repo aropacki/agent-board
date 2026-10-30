@@ -110,7 +110,9 @@ struct FullBoardView: View, SectionHost, Zoomed {
             }
             .padding(.horizontal, z(16)).frame(height: z(38))
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: z(2)) { content() }
+                // A lazy stack guesses the height of cards it has not drawn, and cards vary enough that the guess ran
+                // hundreds of points long, so the column scrolled past its end. A column holds few enough cards to draw.
+                VStack(alignment: .leading, spacing: z(2)) { content() }
                     .padding(.horizontal, z(8))
                     .padding(.bottom, z(80))
             }

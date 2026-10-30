@@ -59,28 +59,13 @@ struct DiscussionView: View, Zoomed {
             }
             Rectangle().fill(T.border).frame(height: 1)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: z(12)) {
-                    if d == nil {
-                        if let error = board.discussionErrors[pr.key] {
-                            note(error, retry: true)
-                        } else {
-                            ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.top, z(40))
-                        }
+                // A lazy stack guesses the height of rows it has not drawn, and threads vary enough that the guess
+                // let the pane scroll past its end. Drawing every row costs about 5 ms each, so only long lists stay lazy.
+                Group {
+                    if (current == .comments ? shownThreads.count : shownTalk.count) > 30 {
+                        LazyVStack(alignment: .leading, spacing: z(12)) { rows(d, current, threads, shownThreads, talk, shownTalk) }
                     } else {
-                        switch current {
-                        case .comments:
-                            if threads.isEmpty { note("No review threads.") } else if shownThreads.isEmpty { note("Every author is filtered out.") }
-                            ForEach(shownThreads) { t in
-                                if t.resolved && !openResolved.contains(t.id) {
-                                    ResolvedThreadRow(thread: t) { withAnimation(.snappy(duration: 0.15)) { _ = openResolved.insert(t.id) } }
-                                } else {
-                                    thread(t)
-                                }
-                            }
-                        case .conversation:
-                            if talk.isEmpty { note("No comments yet.") } else if shownTalk.isEmpty { note("Every author is filtered out.") }
-                            ForEach(shownTalk) { conversationComment($0) }
-                        }
+                        VStack(alignment: .leading, spacing: z(12)) { rows(d, current, threads, shownThreads, talk, shownTalk) }
                     }
                 }
                 .padding(.horizontal, z(10)).padding(.top, z(10)).padding(.bottom, z(current == .conversation ? 12 : 60))
@@ -110,6 +95,32 @@ struct DiscussionView: View, Zoomed {
             board.composing = drafts.values.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }
         .onDisappear { board.composing = false }
+    }
+
+    @ViewBuilder func rows(_ d: PRDiscussion?, _ current: Tab, _ threads: [ReviewThread], _ shownThreads: [ReviewThread],
+                           _ talk: [ThreadComment], _ shownTalk: [ThreadComment]) -> some View {
+        if d == nil {
+            if let error = board.discussionErrors[pr.key] {
+                note(error, retry: true)
+            } else {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.top, z(40))
+            }
+        } else {
+            switch current {
+            case .comments:
+                if threads.isEmpty { note("No review threads.") } else if shownThreads.isEmpty { note("Every author is filtered out.") }
+                ForEach(shownThreads) { t in
+                    if t.resolved && !openResolved.contains(t.id) {
+                        ResolvedThreadRow(thread: t) { withAnimation(.snappy(duration: 0.15)) { _ = openResolved.insert(t.id) } }
+                    } else {
+                        thread(t)
+                    }
+                }
+            case .conversation:
+                if talk.isEmpty { note("No comments yet.") } else if shownTalk.isEmpty { note("Every author is filtered out.") }
+                ForEach(shownTalk) { conversationComment($0) }
+            }
+        }
     }
 
     var surface: String { board.discussion?.surface ?? "panel" }
