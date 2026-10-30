@@ -25,7 +25,7 @@ Swift paths are relative to `Sources/AgentBoard/`. Other paths are relative to t
 | PR, branch, and slot facts from commands | `collector/refs.py` and the provider's `slot_in_*` |
 | Hotkey, panel, and windows | `App/` |
 | Row menus | `Model/Board+Menus.swift` |
-| PR overview, merge, and other PR commands | `GitHub/Overview.swift` (`prCommandArgs`), `UI/Diff/PROverviewPage.swift` |
+| PR overview, merge, and other PR commands | `GitHub/Overview.swift` (`prCommandArgs`; stacked PRs only merge through `stackMergeArgs`), `UI/Diff/PROverviewPage.swift` |
 | Colors, fonts, zoom | `UI/Theme.swift` |
 
 ## Boundaries

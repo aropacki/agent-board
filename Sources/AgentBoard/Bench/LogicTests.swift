@@ -191,6 +191,45 @@ extension Bench {
               && prCommandArgs(commentPR, .ready, headSha: "abc") == ["pr", "ready"] + target
               && prCommandArgs(commentPR, .draft, headSha: "abc") == ["pr", "ready"] + target + ["--undo"]
               && prCommandArgs(commentPR, .updateBranch, headSha: "abc") == ["pr", "update-branch"] + target)
+        func stackEntry(_ position: Int, _ number: Int, _ state: String, draft: Bool = false, decision: String = "APPROVED",
+                        checks: String = "SUCCESS") -> String {
+            #"{"position":\#(position),"pullRequest":{"number":\#(number),"state":"\#(state)","isDraft":\#(draft),"#
+                + #""reviewDecision":"\#(decision)","statusCheckRollup":{"state":"\#(checks)"}}}"#
+        }
+        let stackJSON: ([String]) -> PRStack? = { entries in
+            parseOverview(Data(#"""
+            {"data":{"repository":{"squashMergeAllowed":true,"mergeCommitAllowed":false,"rebaseMergeAllowed":false,
+            "autoMergeAllowed":true,"viewerDefaultMergeMethod":"SQUASH","pullRequest":{"body":"","state":"OPEN",
+            "isDraft":false,"createdAt":"2026-01-01T00:00:00Z","author":{"login":"me"},"baseRefName":"b2",
+            "headRefName":"b3","headRefOid":"abc","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},
+            "mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","isMergeQueueEnabled":false,
+            "isInMergeQueue":false,"mergeQueueEntry":null,"autoMergeRequest":null,"viewerCanUpdateBranch":false,
+            "labels":{"nodes":[]},"reviewRequests":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]},
+            "stackEntry":{"position":3},"stack":{"number":9,"baseRefName":"master","entries":{"nodes":[\#(
+                entries.joined(separator: ","))]}}}}}}
+            """#.utf8))?.stack
+        }
+        let landing = stackJSON([stackEntry(4, 40, "OPEN"), stackEntry(2, 20, "OPEN"), stackEntry(1, 10, "MERGED"),
+                                 stackEntry(3, 30, "OPEN")])
+        check("stack merge: lands the open PRs from the bottom up to this one, and names the first PR below that GitHub would refuse",
+              landing?.lands.map(\.number) == [20, 30] && landing?.list == "#20, #30" && landing?.base == "master"
+              && landing?.blocker(below: 30) == nil
+              && stackJSON([stackEntry(1, 10, "OPEN", checks: "PENDING"), stackEntry(2, 20, "OPEN", draft: true),
+                            stackEntry(3, 30, "OPEN", decision: "REVIEW_REQUIRED")])?.blocker(below: 30)
+                == "#10 has checks running"
+              && stackJSON([stackEntry(1, 10, "OPEN", decision: "REVIEW_REQUIRED"), stackEntry(3, 30, "OPEN")])?
+                .blocker(below: 30) == "#10 needs a review")
+        check("stack merge: asks GitHub's stack merge for the head it was shown, and reads its answer through a gh error",
+              stackMergeArgs(commentPR, method: .squash, headSha: "abc")
+                == ["api", "-X", "PUT", "repos/o/r/pulls/7/merge-async", "-f", "merge_action=default", "-f", "sha=abc",
+                    "-f", "merge_method=squash"]
+              && stackMergeArgs(commentPR, method: nil, headSha: "abc").last == "sha=abc"
+              && stackMergePollArgs(commentPR, uuid: "u1") == ["api", "repos/o/r/pulls/7/merge-async/u1"]
+              && parseStackMerge(#"{"status":"pending","details":{"message":"Merge request enqueued.","uuid":"u1"}}"#)
+                == StackMergeResult(status: "pending", details: .init(message: "Merge request enqueued.", uuid: "u1"))
+              && parseStackMerge("{\"status\":\"failed\",\"details\":{\"message\":\"Pull request is a draft\"}}\ngh: (HTTP 400)")?
+                .details.message == "Pull request is a draft"
+              && parseStackMerge("gh: Not Found (HTTP 404)") == nil)
         let file = DiffFile(path: "a.ts", previousPath: nil, status: "modified", additions: 3, deletions: 1, lines: patch, generated: false)
         let touched = DiffFile(path: "a.ts", previousPath: nil, status: "modified", additions: 3, deletions: 1,
                                lines: parsePatch("@@ -10,4 +10,5 @@ func a() {\n ctx\n-old\n+newer\n+more\n ctx2"), generated: false)

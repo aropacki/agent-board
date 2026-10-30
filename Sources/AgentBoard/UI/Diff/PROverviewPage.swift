@@ -155,6 +155,10 @@ struct MergeBox: View, Zoomed {
                 divider
                 branch(o)
             }
+            if o.open, let stack = o.stack, stack.lands.count > 1 {
+                divider
+                stackLine(stack)
+            }
             Rectangle().fill(T.border).frame(height: 1)
             MergeActions(pr: pr, overview: o)
                 .padding(.horizontal, z(12)).padding(.vertical, z(10))
@@ -229,6 +233,16 @@ struct MergeBox: View, Zoomed {
                     .help("Merge \(o.base) into \(o.head)")
                     .padding(.trailing, z(7))
             }
+        } more: { EmptyView() }
+    }
+
+    func stackLine(_ stack: PRStack) -> some View {
+        let below = stack.lands.filter { $0.number != pr.number }
+        let blocker = stack.blocker(below: pr.number)
+        return StatusLine(icon: "square.stack.3d.up", tint: blocker == nil ? T.green : T.yellow,
+                          title: "Merges with \(below.count) below",
+                          detail: blocker ?? below.map { "#\($0.number)" }.joined(separator: ", ")) {
+            EmptyView()
         } more: { EmptyView() }
     }
 }
@@ -339,17 +353,13 @@ struct MergeActions: View, Zoomed {
         let conflicts = o.mergeState == "DIRTY" || o.mergeable == "CONFLICTING"
         if conflicts {
             Text("Fix the conflicts to merge.").font(ui(12)).foregroundStyle(T.text3)
+        } else if let stack = o.stack {
+            stackChoices(o, stack, ready: ready, busy: busy)
         } else if o.queueEnabled {
             armedButton("queue", ready ? "Add to merge queue" : "Merge when ready", confirm: "Confirm: queue #\(pr.number)",
                         tint: T.green, busy: busy) { board.runPRCommand(pr, .merge(nil, auto: false)) }
         } else {
-            if o.methods.count > 1 {
-                HStack(spacing: z(2)) {
-                    ForEach(o.methods, id: \.self) { m in
-                        ToggleChip(title: m.short, on: m == method) { chosen = m.rawValue; armed = nil }
-                    }
-                }
-            }
+            methodChips(o)
             if ready {
                 armedButton("merge", method.title, confirm: "Confirm: \(method.title.lowercased()) #\(pr.number)",
                             tint: T.green, busy: busy) { board.runPRCommand(pr, .merge(method, auto: false)) }
@@ -361,6 +371,36 @@ struct MergeActions: View, Zoomed {
             } else {
                 Text("Waiting on reviews or required checks.").font(ui(12)).foregroundStyle(T.text3)
             }
+        }
+    }
+
+    @ViewBuilder func methodChips(_ o: PROverview) -> some View {
+        if o.methods.count > 1 {
+            HStack(spacing: z(2)) {
+                ForEach(o.methods, id: \.self) { m in
+                    ToggleChip(title: m.short, on: m == method) { chosen = m.rawValue; armed = nil }
+                }
+            }
+        }
+    }
+
+    /// GitHub has no auto-merge for stacks, so a stack that isn't ready says what it waits on instead.
+    @ViewBuilder func stackChoices(_ o: PROverview, _ stack: PRStack, ready: Bool, busy: Bool) -> some View {
+        let blocker = stack.blocker(below: pr.number)
+        let whole = stack.lands.count > 1
+        if !ready || blocker != nil {
+            Text(blocker == nil ? "Waiting on reviews or required checks." : "Waiting on the PRs below.")
+                .font(ui(12)).foregroundStyle(T.text3)
+        } else if o.queueEnabled {
+            armedButton("queue", whole ? "Queue the stack" : "Add to merge queue", confirm: "Confirm: queue \(stack.list)",
+                        tint: T.green, busy: busy) { board.runStackMerge(pr, nil) }
+        } else {
+            methodChips(o)
+            armedButton("merge", whole ? "Merge stack (\(stack.lands.count))" : method.title,
+                        confirm: "Confirm: \(method.short.lowercased()) \(stack.list)", tint: T.green, busy: busy) {
+                board.runStackMerge(pr, method)
+            }
+            .help(whole ? "Merge \(stack.list) into \(stack.base) together, bottom first" : "")
         }
     }
 

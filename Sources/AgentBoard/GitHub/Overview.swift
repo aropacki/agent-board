@@ -64,8 +64,40 @@ struct PROverview: Equatable {
     let methods: [MergeMethod]
     let defaultMethod: MergeMethod?
     let autoMergeAllowed: Bool
+    var stack: PRStack? = nil
 
     var open: Bool { state == "OPEN" }
+}
+
+/// A PR in a GitHub stack can only merge through GitHub's stack merge, which lands it with every open PR below it.
+struct PRStack: Equatable {
+    struct Member: Equatable {
+        let number: Int
+        let draft: Bool
+        let decision: String?
+        /// The check rollup: SUCCESS, FAILURE, ERROR, PENDING, EXPECTED, or nil with no checks.
+        let checks: String?
+    }
+
+    let number: Int
+    let base: String
+    /// The open PRs from the bottom of the stack up to and including this one, bottom first.
+    let lands: [Member]
+
+    var list: String { lands.map { "#\($0.number)" }.joined(separator: ", ") }
+
+    /// Why GitHub would refuse the merge for a PR below this one. GitHub checks only on the merge itself, so this
+    /// is what keeps the button from promising a merge that can't happen.
+    func blocker(below number: Int) -> String? {
+        for m in lands where m.number != number {
+            if m.draft { return "#\(m.number) is a draft" }
+            if m.decision == "CHANGES_REQUESTED" { return "#\(m.number) has changes requested" }
+            if m.decision == "REVIEW_REQUIRED" { return "#\(m.number) needs a review" }
+            if m.checks == "FAILURE" || m.checks == "ERROR" { return "#\(m.number) has failing checks" }
+            if m.checks == "PENDING" || m.checks == "EXPECTED" { return "#\(m.number) has checks running" }
+        }
+        return nil
+    }
 }
 
 let overviewQuery = """
@@ -85,6 +117,13 @@ query($owner: String!, $repo: String!, $number: Int!) {
       labels(first: 20) { nodes { name color } }
       reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { name } ... on Bot { login } } } }
       latestOpinionatedReviews(first: 20, writersOnly: true) { nodes { author { login } state } }
+      stackEntry { position }
+      stack {
+        number baseRefName
+        entries(first: 50) {
+          nodes { position pullRequest { number state isDraft reviewDecision statusCheckRollup { state } } }
+        }
+      }
     }
   }
 }
@@ -113,6 +152,24 @@ private struct OverviewResponse: Decodable {
         let mergeMethod: String
         let enabledBy: Login?
     }
+    struct Rollup: Decodable { let state: String }
+    struct StackPR: Decodable {
+        let number: Int
+        let state: String
+        let isDraft: Bool
+        let reviewDecision: String?
+        let statusCheckRollup: Rollup?
+    }
+    struct Entry: Decodable {
+        let position: Int
+        let pullRequest: StackPR?
+    }
+    struct Position: Decodable { let position: Int }
+    struct Stack: Decodable {
+        let number: Int
+        let baseRefName: String
+        let entries: Nodes<Entry>
+    }
     struct PullRequest: Decodable {
         let body: String
         let state: String
@@ -137,6 +194,8 @@ private struct OverviewResponse: Decodable {
         let labels: Nodes<Label>
         let reviewRequests: Nodes<Request>
         let latestOpinionatedReviews: Nodes<Review>
+        let stackEntry: Position?
+        let stack: Stack?
     }
     struct Repository: Decodable {
         let squashMergeAllowed: Bool
@@ -163,6 +222,14 @@ func parseOverview(_ data: Data) -> PROverview? {
     }
     let allowed: [(Bool, MergeMethod)] = [(repo.squashMergeAllowed, .squash), (repo.mergeCommitAllowed, .merge),
                                           (repo.rebaseMergeAllowed, .rebase)]
+    let stack = pr.stack.flatMap { s -> PRStack? in
+        guard let at = pr.stackEntry?.position else { return nil }
+        let lands = s.entries.nodes.filter { $0.position <= at }.sorted { $0.position < $1.position }
+            .compactMap(\.pullRequest).filter { $0.state == "OPEN" }
+            .map { PRStack.Member(number: $0.number, draft: $0.isDraft, decision: $0.reviewDecision,
+                                  checks: $0.statusCheckRollup?.state) }
+        return PRStack(number: s.number, base: s.baseRefName, lands: lands)
+    }
     return PROverview(
         body: cleanCommentBody(pr.body), state: pr.state, draft: pr.isDraft, author: pr.author?.login ?? "ghost",
         createdAt: ISO8601DateFormatter().date(from: pr.createdAt) ?? .distantPast,
@@ -177,7 +244,7 @@ func parseOverview(_ data: Data) -> PROverview? {
         reviewers: reviewed + requested,
         methods: allowed.filter(\.0).map(\.1),
         defaultMethod: repo.viewerDefaultMergeMethod.flatMap(MergeMethod.init(rawValue:)),
-        autoMergeAllowed: repo.autoMergeAllowed)
+        autoMergeAllowed: repo.autoMergeAllowed, stack: stack)
 }
 
 /// Blocks; call off the main thread.
@@ -235,4 +302,31 @@ func prCommandArgs(_ pr: PR, _ command: PRCommand, headSha: String) -> [String] 
     case .draft: return ["pr", "ready"] + target + ["--undo"]
     case .updateBranch: return ["pr", "update-branch"] + target
     }
+}
+
+/// Asks GitHub to merge a stacked PR with every open PR below it. It runs in the background on GitHub's side; the
+/// sha makes GitHub refuse it if someone pushed since. No method lets a merge queue pick its own.
+func stackMergeArgs(_ pr: PR, method: MergeMethod?, headSha: String) -> [String] {
+    ["api", "-X", "PUT", "repos/\(pr.repo)/pulls/\(pr.number)/merge-async", "-f", "merge_action=default",
+     "-f", "sha=\(headSha)"] + (method.map { ["-f", "merge_method=\($0.rawValue.lowercased())"] } ?? [])
+}
+
+func stackMergePollArgs(_ pr: PR, uuid: String) -> [String] {
+    ["api", "repos/\(pr.repo)/pulls/\(pr.number)/merge-async/\(uuid)"]
+}
+
+struct StackMergeResult: Decodable, Equatable {
+    struct Details: Decodable, Equatable {
+        let message: String?
+        let uuid: String?
+    }
+    /// pending, merged, enqueued, or failed.
+    let status: String
+    let details: Details
+}
+
+/// `gh api` prints the body even when GitHub answers with an error status, and a refused merge says why in it.
+func parseStackMerge(_ output: String) -> StackMergeResult? {
+    guard let start = output.firstIndex(of: "{"), let end = output.lastIndex(of: "}"), start < end else { return nil }
+    return try? JSONDecoder().decode(StackMergeResult.self, from: Data(output[start...end].utf8))
 }
