@@ -40,10 +40,18 @@ perf-profile: build
 	  sample $$pid 6 -mayDie -file .build/perf/profile.txt >/dev/null 2>&1; wait $$pid; \
 	  python3 extras/profile_top.py .build/perf/profile.txt
 
-app: build
+LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
+.build/AppIcon.icns: extras/make-icon.swift
+	rm -rf .build/AppIcon.iconset
+	swift extras/make-icon.swift .build/AppIcon.iconset
+	iconutil -c icns .build/AppIcon.iconset -o $@
+
+app: build .build/AppIcon.icns
 	rm -rf "$(STAGE)"
-	mkdir -p "$(STAGE)/Contents/MacOS"
+	mkdir -p "$(STAGE)/Contents/MacOS" "$(STAGE)/Contents/Resources"
 	cp "$(BIN)" "$(STAGE)/Contents/MacOS/AgentBoard"
+	cp .build/AppIcon.icns "$(STAGE)/Contents/Resources/AppIcon.icns"
 	sed 's|@BUNDLE_ID@|$(BUNDLE_ID)|g' install/Info.plist > "$(STAGE)/Contents/Info.plist"
 	codesign --force --identifier "$(BUNDLE_ID)" -s "$(SIGN_IDENTITY)" "$(STAGE)"
 
@@ -52,6 +60,8 @@ app: build
 install: app
 	mkdir -p "$(APP_DIR)" "$(AGENT_BOARD_HOME)/bin" "$(HOME)/Library/LaunchAgents"
 	rm -rf "$(APP).new" && cp -R "$(STAGE)" "$(APP).new" && rm -rf "$(APP)" && mv "$(APP).new" "$(APP)"
+	@# Notification banners read the icon from Launch Services, which keeps the old one until told.
+	$(LSREGISTER) -f "$(APP)"
 	install -m 755 collector/collect.py collector/journal-hook.py collector/act.sh "$(AGENT_BOARD_HOME)/bin/"
 	install -m 644 collector/config.py collector/refs.py collector/common.py "$(AGENT_BOARD_HOME)/bin/"
 	mkdir -p "$(AGENT_BOARD_HOME)/bin/sources" "$(AGENT_BOARD_HOME)/bin/worktrees"

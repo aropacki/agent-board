@@ -6,6 +6,8 @@
 	<string>Agent Board</string>
 	<key>CFBundleExecutable</key>
 	<string>AgentBoard</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>@BUNDLE_ID@</string>
 	<key>CFBundleName</key>
