@@ -22,7 +22,7 @@ enum Bench {
 
     static func run() {
         UserDefaults.standard.set(ProcessInfo.processInfo.environment["BENCH_PAGE"] ?? DiffPage.files.rawValue, forKey: "diffPage")
-        let modes = ["BENCH_LOGIC", "BENCH_CONSISTENCY", "BENCH_MENUAUDIT", "BENCH_FULL", "BENCH_SNAP", "BENCH_TICKER", "BENCH_BANNER"]
+        let modes = ["BENCH_LOGIC", "BENCH_CONSISTENCY", "BENCH_MENUAUDIT", "BENCH_FULL", "BENCH_SNAP", "BENCH_TICKER", "BENCH_BANNER", "BENCH_BANNER_SEQ"]
         guard modes.contains(where: { ProcessInfo.processInfo.environment[$0] != nil }) else {
             Perf.run()
             return
@@ -113,6 +113,32 @@ enum Bench {
         let scroller = scrollView(host)
         if ProcessInfo.processInfo.environment["BENCH_LOGIC"] != nil {
             logic()
+            return
+        }
+        if let out = ProcessInfo.processInfo.environment["BENCH_BANNER_SEQ"] {
+            let banners = Banners()
+            let corner = CGPoint(x: -8000, y: -3000)
+            let stack = NSWindow(contentRect: NSRect(x: corner.x - 32, y: corner.y - 32, width: 32, height: 32),
+                                 styleMask: .borderless, backing: .buffered, defer: false)
+            let seqHost = NSHostingView(rootView: BannerStack(banners: banners, open: { _ in }, close: { banners.remove($0)             }, resized: { wanted in
+                // Grows only, standing in for the app's delayed shrink so a leaving banner stays in frame.
+                let size = CGSize(width: max(wanted.width, stack.frame.width), height: max(wanted.height, stack.frame.height))
+                stack.setFrame(NSRect(x: corner.x - size.width, y: corner.y - size.height, width: size.width, height: size.height),
+                               display: true)
+            }))
+            seqHost.sizingOptions = []
+            stack.contentView = seqHost
+            stack.orderFrontRegardless()
+            spin(0.3)
+            banners.add([TickerEvent(kind: .review, text: "Review requested: #138222 validata: add resolution_strategy · @octocat")])
+            var at = 0.0
+            for t in [0.04, 0.1, 0.2, 0.35, 0.6, 1.0, 4.0, 7.9, 8.05, 8.15, 8.4] {
+                spin(t - at)
+                at = t
+                let rep = seqHost.bitmapImageRepForCachingDisplay(in: seqHost.bounds)!
+                seqHost.cacheDisplay(in: seqHost.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(out)-\(t).png"))
+            }
             return
         }
         if let out = ProcessInfo.processInfo.environment["BENCH_BANNER"] {

@@ -3,7 +3,18 @@ import SwiftUI
 
 @Observable
 final class Banners {
+    static let shown = 3
     var items: [TickerEvent] = []
+
+    func add(_ events: [TickerEvent]) {
+        withAnimation(Motion.reduced ? nil : .smooth(duration: 0.35)) {
+            items = Array((events.reversed() + items).prefix(Banners.shown))
+        }
+    }
+
+    func remove(_ id: UUID) {
+        withAnimation(Motion.reduced ? nil : .easeIn(duration: 0.2)) { items.removeAll { $0.id == id } }
+    }
 }
 
 /// The event's symbol on a tile in its color, so the kind reads before the words do.
@@ -43,9 +54,9 @@ struct BannerStack: View {
         VStack(alignment: .trailing, spacing: z(8)) {
             ForEach(banners.items) { event in
                 BannerCard(event: event, open: { open(event) }, close: { close(event.id) })
-                    .transition(Motion.reduced ? .opacity : .asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))))
+                    // A short drop stays inside the window's padding, so nothing is clipped on the way in or out.
+                    .transition(Motion.reduced ? .opacity : .offset(y: -z(10)).combined(with: .opacity)
+                        .combined(with: .scale(scale: 0.97, anchor: .top)))
             }
         }
         .padding(BannerStack.pad)
@@ -142,7 +153,9 @@ struct BannerCard: View, Zoomed {
                                startPoint: .leading, endPoint: .trailing)
                     .frame(width: band)
                     .offset(x: -band + sweep * (geo.size.width + band))
+                    .animation(.easeInOut(duration: 1.2), value: sweep)
                     .opacity(wash)
+                    .animation(.easeOut(duration: 1.6).delay(1.0), value: wash)
                 if hovering { Color.white.opacity(0.03) }
             }
         }
@@ -153,6 +166,7 @@ struct BannerCard: View, Zoomed {
         Capsule().fill(event.color.opacity(0.75))
             .frame(height: z(2))
             .scaleEffect(x: left, anchor: .leading)
+            .animation(hovering ? .easeOut(duration: 0.25) : .linear(duration: BannerCard.life), value: left)
             .padding(.horizontal, z(14)).padding(.bottom, z(4))
             .allowsHitTesting(false)
     }
@@ -169,22 +183,17 @@ struct BannerCard: View, Zoomed {
         .transition(.opacity)
     }
 
+    /// Each animation is scoped to the view it moves, so a long one never carries the card's own position.
     func arrive() {
         run(paused: false)
         guard !Motion.reduced else { wash = 0; return }
-        withAnimation(.easeInOut(duration: 1.2)) { sweep = 1 }
-        withAnimation(.easeOut(duration: 1.6).delay(1.0)) { wash = 0 }
+        sweep = 1
+        wash = 0
         Task {
             try? await Task.sleep(for: .seconds(0.35))
             bounce += 1
         }
     }
 
-    func run(paused: Bool) {
-        if paused {
-            withAnimation(.easeOut(duration: 0.25)) { left = 1 }
-        } else {
-            withAnimation(.linear(duration: BannerCard.life)) { left = 0 }
-        }
-    }
+    func run(paused: Bool) { left = paused ? 1 : 0 }
 }

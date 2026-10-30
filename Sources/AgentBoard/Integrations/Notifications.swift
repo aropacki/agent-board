@@ -5,7 +5,6 @@ import SwiftUI
 /// Everything else stays in the ticker. The board draws them itself, because a system banner can't be styled.
 final class Notifier {
     static let alerting: Set<TickerEvent.Kind> = [.comments, .changes, .review]
-    static let shown = 3
     let board: Board
     let banners = Banners()
     let window: NSPanel
@@ -38,13 +37,11 @@ final class Notifier {
         guard !fresh.isEmpty else { return }
         NSSound.beep()
         window.ignoresMouseEvents = false
-        withAnimation(Motion.reduced ? nil : .spring(duration: 0.45, bounce: 0.2)) {
-            banners.items = Array((fresh.reversed() + banners.items).prefix(Notifier.shown))
-        }
+        banners.add(fresh)
     }
 
     func dismiss(_ id: UUID) {
-        withAnimation(.easeOut(duration: 0.25)) { banners.items.removeAll { $0.id == id } }
+        banners.remove(id)
         if banners.items.isEmpty { window.ignoresMouseEvents = true }
     }
 
