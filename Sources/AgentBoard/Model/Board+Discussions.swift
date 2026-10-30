@@ -40,6 +40,7 @@ extension Board {
         discussionRequests[pr.key] = request
         DispatchQueue.global(qos: .userInitiated).async {
             let result = fetchDiscussion(pr)
+            if case .success(let discussion) = result { warmMarkdown(discussion) }
             DispatchQueue.main.async {
                 guard self.discussionRequests[pr.key] == request else { return }
                 self.discussionLoading.remove(pr.key)

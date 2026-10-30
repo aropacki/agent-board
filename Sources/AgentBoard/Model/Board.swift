@@ -115,6 +115,8 @@ final class Board {
     @ObservationIgnored var lastModified: Date?
     @ObservationIgnored var lastDecoded: BoardState?
     @ObservationIgnored let decodeQueue = DispatchQueue(label: "agentboard.decode", qos: .userInitiated)
+    /// Writes of files the collector reads. A collect waits for them, so it never reads one half done.
+    @ObservationIgnored let diskQueue = DispatchQueue(label: "agentboard.disk", qos: .userInitiated)
     @ObservationIgnored var collecting = false
     @ObservationIgnored var pendingCollect: Bool?
     @ObservationIgnored var lastCollect = Date.distantPast

@@ -7,6 +7,7 @@ extension Board {
         overviewLoading.insert(pr.key)
         DispatchQueue.global(qos: .userInitiated).async {
             let result = fetchOverview(pr)
+            if case .success(let overview) = result { warmMarkdown(document: overview.body) }
             DispatchQueue.main.async {
                 self.overviewLoading.remove(pr.key)
                 switch result {

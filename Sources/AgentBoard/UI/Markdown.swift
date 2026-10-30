@@ -1,7 +1,50 @@
 import AppKit
 
+/// One parse per text. Views redraw on every hover and scroll, and a fetch parses its text off the main thread
+/// before it lands, so a draw on the main thread finds the work done.
+final class Memo<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: Value] = [:]
+
+    func value(_ key: String, _ make: (String) -> Value) -> Value {
+        if let hit = lock.withLock({ values[key] }) { return hit }
+        let made = make(key)
+        lock.withLock {
+            if values.count >= 4000 { values.removeAll(keepingCapacity: true) }
+            values[key] = made
+        }
+        return made
+    }
+}
+
+private let blockMemo = Memo<[(code: Bool, lang: String, text: String)]>()
+private let documentMemo = Memo<[MarkdownBlock]>()
+private let inlineMemo = Memo<AttributedString>()
+
+/// Off the main thread: the comment bodies a discussion view draws.
+func warmMarkdown(_ discussion: PRDiscussion) {
+    for comment in discussion.conversation + discussion.threads.flatMap(\.comments) { warmMarkdown(comment: comment.body) }
+}
+
+func warmMarkdown(comment body: String) {
+    for block in commentBlocks(body) where !block.code { _ = inlineMarkdown(block.text) }
+}
+
+func warmMarkdown(document body: String) {
+    for block in markdownBlocks(body) {
+        switch block {
+        case .heading(_, let s), .paragraph(let s), .quote(let s): _ = inlineMarkdown(s)
+        case .list(let items): items.forEach { _ = inlineMarkdown($0.text) }
+        case .table(let rows): rows.joined().forEach { _ = inlineMarkdown($0) }
+        case .code, .rule: break
+        }
+    }
+}
+
 /// A comment body as prose and fenced code, in order.
-func commentBlocks(_ body: String) -> [(code: Bool, lang: String, text: String)] {
+func commentBlocks(_ body: String) -> [(code: Bool, lang: String, text: String)] { blockMemo.value(body, parseCommentBlocks) }
+
+private func parseCommentBlocks(_ body: String) -> [(code: Bool, lang: String, text: String)] {
     var out: [(code: Bool, lang: String, text: String)] = []
     var buffer: [String] = []
     var lang: String?
@@ -59,7 +102,9 @@ enum MarkdownBlock: Equatable {
 }
 
 /// A document's block structure, for text long enough that flattening it to one run would lose its shape.
-func markdownBlocks(_ body: String) -> [MarkdownBlock] {
+func markdownBlocks(_ body: String) -> [MarkdownBlock] { documentMemo.value(body, parseMarkdownBlocks) }
+
+private func parseMarkdownBlocks(_ body: String) -> [MarkdownBlock] {
     var out: [MarkdownBlock] = []
     for part in commentBlocks(body) {
         if part.code { out.append(.code(lang: part.lang, text: part.text)); continue }
@@ -124,7 +169,9 @@ func markdownBlocks(_ body: String) -> [MarkdownBlock] {
     return out
 }
 
-func inlineMarkdown(_ text: String) -> AttributedString {
+func inlineMarkdown(_ text: String) -> AttributedString { inlineMemo.value(text, parseInlineMarkdown) }
+
+private func parseInlineMarkdown(_ text: String) -> AttributedString {
     let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
     return (try? AttributedString(markdown: flattenMarkdownBlocks(text), options: options)) ?? AttributedString(text)
 }

@@ -5,19 +5,33 @@ extension Board {
     func review(for pr: PR) -> AgentReview? { reviews[reviewFileName(pr)] }
 
     /// Picks up review files as agents write them; the first pass after launch is quiet.
+    /// Reads on the decode queue. A file saved here while a read is out keeps its saved copy, since its stamp moved.
     func loadReviews() {
-        let fm = FileManager.default
-        let names = Set(((try? fm.contentsOfDirectory(atPath: reviewsDir.path)) ?? []).filter { $0.hasSuffix(".json") })
+        let known = reviewStamps
+        decodeQueue.async { [weak self] in
+            let fm = FileManager.default
+            let names = Set(((try? fm.contentsOfDirectory(atPath: reviewsDir.path)) ?? []).filter { $0.hasSuffix(".json") })
+            var read: [(name: String, stamp: Date, review: AgentReview?)] = []
+            for name in names.sorted() {
+                let url = reviewsDir.appendingPathComponent(name)
+                guard let stamp = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date, stamp != known[name],
+                      let data = try? Data(contentsOf: url), !data.isEmpty else { continue }
+                let review = parseReview(data)
+                if let review { ([review.summary] + review.comments.map(\.body)).forEach { warmMarkdown(comment: $0) } }
+                read.append((name, stamp, review))
+            }
+            DispatchQueue.main.async { self?.applyReviews(names: names, read: read, known: known) }
+        }
+    }
+
+    private func applyReviews(names: Set<String>, read: [(name: String, stamp: Date, review: AgentReview?)], known: [String: Date]) {
         for gone in Set(reviews.keys).subtracting(names) {
             reviews[gone] = nil
             reviewStamps[gone] = nil
         }
-        for name in names {
-            let url = reviewsDir.appendingPathComponent(name)
-            guard let stamp = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date, stamp != reviewStamps[name],
-                  let data = try? Data(contentsOf: url), !data.isEmpty else { continue }
+        for (name, stamp, review) in read where reviewStamps[name] == known[name] {
             reviewStamps[name] = stamp
-            guard let review = parseReview(data) else {
+            guard let review else {
                 reviewErrors[name] = "The agent's review file isn't in the shape the board reads."
                 continue
             }

@@ -34,6 +34,8 @@ extension Board {
         discussions = cache.discussions
         discussionsFetchedAt = cache.discussionsAt
         discussionsUnresolved = cache.discussionsUnresolved
+        let restored = cache.discussions
+        DispatchQueue.global(qos: .utility).async { restored.values.forEach(warmMarkdown) }
     }
 
     /// Batches the writes: a prefetch lands many results within a second or two.
@@ -145,6 +147,7 @@ extension Board {
         lastCollect = Date()
         if fresh { refreshing = true }
         DispatchQueue.global(qos: .utility).async {
+            self.diskQueue.sync {}
             let (code, output) = runTool("/usr/bin/python3", fresh ? [collectScript, "--fresh"] : [collectScript], qos: .utility)
             DispatchQueue.main.async {
                 self.collecting = false
@@ -176,9 +179,12 @@ extension Board {
     }
 
     func markSeen(_ id: String) {
-        var seen = (try? JSONSerialization.jsonObject(with: Data(contentsOf: seenURL))) as? [String: Double] ?? [:]
-        seen[id] = Date().timeIntervalSince1970
-        if let data = try? JSONSerialization.data(withJSONObject: seen) { try? data.write(to: seenURL, options: .atomic) }
+        let at = Date().timeIntervalSince1970
+        diskQueue.async {
+            var seen = (try? JSONSerialization.jsonObject(with: Data(contentsOf: seenURL))) as? [String: Double] ?? [:]
+            seen[id] = at
+            if let data = try? JSONSerialization.data(withJSONObject: seen) { try? data.write(to: seenURL, options: .atomic) }
+        }
     }
 
     /// A source toasts when it starts failing, then stays quiet until it recovers. `explicit` is a
