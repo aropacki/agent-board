@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var popup: PopupPanel?
     var popupHost: NSView?
     var popupHolds = 0
+    var popupReturnTo: NSRunningApplication?
     var hotKey: GlobalHotKey?
     var notifier: Notifier?
     var inFront = false
@@ -78,7 +79,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let hadKeyboard = popup.isKeyWindow
         popup.orderOut(nil)
         popup.contentView = NSView()
-        if hadKeyboard { returnKeyboard() }
+        if NSApp.isActive, let app = popupReturnTo, !app.isTerminated {
+            NSApp.yieldActivation(to: app)
+            app.activate()
+        } else if hadKeyboard {
+            returnKeyboard()
+        }
+        popupReturnTo = nil
+        syncActivity()
     }
 
     /// The board's windows never activate the app, so the app in front keeps its caret even while a board window
@@ -88,8 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         front.activate()
     }
 
-    /// Covers the screen under the pointer, over every app and full-screen Space, without activating the app,
-    /// so whatever was in front stays in front when the popup goes.
+    /// Covers the screen under the pointer, over every app and full-screen Space. The app activates while the popup
+    /// is up: an inactive app's panel loses the keyboard whenever the front app takes it back, and an inactive app
+    /// runs at background priority. The app that was in front gets activation back when the popup goes.
     func showPopup() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         guard let screen else { return }
@@ -115,16 +124,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let f = screen.frame, v = screen.visibleFrame
             board.popupSafe = EdgeInsets(top: f.maxY - v.maxY, leading: v.minX - f.minX, bottom: v.minY - f.minY, trailing: f.maxX - v.maxX)
             popup.setFrame(f, display: false)
+            if let front = NSWorkspace.shared.frontmostApplication, front != .current { popupReturnTo = front }
         }
         popup.orderFrontRegardless()
+        NSApp.activate()
         popup.makeKey()
+        syncActivity()
     }
 
-    /// Clicking into another app, or another of the board's windows, closes the popup.
+    /// Clicking into another app, or another of the board's windows, closes the popup. While the app is still
+    /// active and no other window took the keyboard, the loss is transient, so the popup takes it back.
     func windowDidResignKey(_ notification: Notification) {
         guard let popup, (notification.object as? NSWindow) === popup, popupHolds == 0 else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.popupHolds == 0, popup.isVisible, !popup.isKeyWindow else { return }
+            if NSApp.isActive && NSApp.keyWindow == nil {
+                popup.makeKey()
+                return
+            }
             self.board.closePopup()
         }
     }
@@ -299,10 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.level = .floating
         panel.orderFrontRegardless()
         board.isFront = true
-        if frontActivity == nil {
-            frontActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
-                                                                  reason: "Agent Board is in front")
-        }
+        syncActivity()
         board.reload()
         board.collectIfStale()
         NSAnimationContext.runAnimationGroup { ctx in
@@ -313,15 +327,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// Asks the scheduler for interactive latency while the board is in front or the popup is up.
+    func syncActivity() {
+        let wanted = inFront || popup?.isVisible == true
+        if wanted, frontActivity == nil {
+            frontActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
+                                                                  reason: "Agent Board is in front")
+        } else if !wanted, let activity = frontActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            frontActivity = nil
+        }
+    }
+
     func sendBehind() {
         inFront = false
         updateTicker()
         board.isFront = false
         board.closeMenu(surface: "panel")
-        if let activity = frontActivity {
-            ProcessInfo.processInfo.endActivity(activity)
-            frontActivity = nil
-        }
+        syncActivity()
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             panel.animator().alphaValue = 0

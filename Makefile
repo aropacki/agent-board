@@ -26,11 +26,13 @@ test: build
 	python3 -m unittest discover -s collector -p 'test_*.py'
 
 # ONLY=diff runs the scenarios whose names start with it. ROUNDS sets the passes per scenario (default 3).
+# LOAD=n runs n busy threads alongside, and compares against the load baseline.
 perf: build
-	@BENCH_ONLY="$(ONLY)" BENCH_ROUNDS="$(ROUNDS)" $(BIN) --bench
+	@BENCH_ONLY="$(ONLY)" BENCH_ROUNDS="$(ROUNDS)" BENCH_LOAD="$(LOAD)" $(BIN) --bench
 
 perf-save:
 	cp .build/perf/last.tsv .build/perf/baseline.tsv
+	@if [ -f .build/perf/last-load.tsv ]; then cp .build/perf/last-load.tsv .build/perf/baseline-load.tsv; fi
 
 perf-profile: build
 	@test -n "$(ONLY)" || { echo "usage: make perf-profile ONLY=<scenario>"; exit 1; }
