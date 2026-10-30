@@ -28,7 +28,11 @@ struct DiffFileHeader: View, Zoomed {
                         Text((file.path as NSString).lastPathComponent).foregroundStyle(reviewed ? T.text2 : T.text)
                     }
                     .font(mono(11)).lineLimit(1).truncationMode(.head)
-                    if file.status != "modified" { Text(file.status).font(ui(10.5)).foregroundStyle(T.text3) }
+                    .strikethrough(file.status == "removed", color: T.red.opacity(0.7))
+                    FileChangeTag(status: file.status)
+                    if !["modified", "added", "removed"].contains(file.status) {
+                        Text(file.status).font(ui(10.5)).foregroundStyle(T.text3)
+                    }
                     if let previous = file.previousPath {
                         Text("from " + previous).font(ui(10.5)).foregroundStyle(T.text3).lineLimit(1).truncationMode(.head)
                     }
@@ -74,7 +78,7 @@ struct DiffFileHeader: View, Zoomed {
 struct DiffChunkView: View, Zoomed, Equatable {
     static func == (a: DiffChunkView, b: DiffChunkView) -> Bool {
         a.rows == b.rows && a.last == b.last && a.stamp == b.stamp && a.numWidth == b.numWidth && a.pr == b.pr
-            && a.threads == b.threads && a.ghosts == b.ghosts
+            && a.threads == b.threads && a.ghosts == b.ghosts && a.fileHasNotes == b.fileHasNotes
     }
 
     @Environment(\.zoom) var zoom
@@ -88,6 +92,8 @@ struct DiffChunkView: View, Zoomed, Equatable {
     let numWidth: CGFloat
     let threads: [ReviewThread]
     let ghosts: [AgentReview.Comment]
+    /// The whole file's, so every chunk of it keeps one code width.
+    let fileHasNotes: Bool
     @Binding var draft: String
     @State private var frames = DiffRowFrames()
     /// This chunk's drag started on its code, so its moves extend the pick.
@@ -135,12 +141,23 @@ struct DiffChunkView: View, Zoomed, Equatable {
         let numbers = rows.compactMap { i -> RowPaint.Number? in
             let line = file.lines[i]
             guard line.kind != .hunk, let n = line.new ?? line.old else { return nil }
-            return .init(row: i, text: String(n), color: line.kind == .delete ? T.red.opacity(0.5) : T.text3.opacity(0.55))
+            let color = line.kind == .delete ? T.red.opacity(0.75) : line.kind == .add ? T.green.opacity(0.75) : T.text3.opacity(0.55)
+            return .init(row: i, text: String(n), color: color)
         }
-        return MarginLayout(spans: spans, lanes: marginLanes(spans), margin: z(260)...z(380), lane: z(7), gutter: z(14),
+        let marks = file.status == "added" ? [] : rows.compactMap { i -> RowPaint.Number? in
+            switch file.lines[i].kind {
+            case .add: .init(row: i, text: "+", color: T.green)
+            case .delete: .init(row: i, text: "−", color: T.red)
+            case .context, .hunk: nil
+            }
+        }
+        // A file with no notes gives its code the whole width, so long lines don't wrap beside an empty margin.
+        let margined = fileHasNotes || (selection != nil && !board.diffDragging)
+        return MarginLayout(spans: spans, lanes: marginLanes(spans), margin: margined ? z(260)...z(380) : 0...0, lane: z(7),
+                            gutter: margined ? z(14) : 0,
                             gap: z(6), tetherDrop: z(14), stamp: stamp + "|\(zoom)", rowFrames: frames) {
-            RowPaint(paints: paints, numbers: numbers, frames: frames, bar: z(2),
-                     numberEdge: CGPoint(x: z(6) + numWidth, y: z(1.5)), numberFont: mono(10.5))
+            RowPaint(paints: paints, numbers: numbers, marks: marks, frames: frames, bar: z(3),
+                     numberEdge: CGPoint(x: z(6) + numWidth, y: z(1.5)), markX: z(12) + numWidth, numberFont: mono(10.5))
                 .layoutValue(key: MarginPartKey.self, value: .paint)
             ForEach(rows, id: \.self) { i in
                 let line = file.lines[i]
@@ -234,10 +251,11 @@ struct DiffChunkView: View, Zoomed, Equatable {
     func paint(_ i: Int, picked: Bool, lit: Color?, band: Color?) -> RowPaint.Paint? {
         if picked { return .init(row: i, fill: T.blue.opacity(0.16), edge: T.blue.opacity(0.85)) }
         let kind = file.lines[i].kind
+        // A new file is all additions, so it keeps the edge and drops the fill that would tint every line.
         let quiet = file.status == "added"
-        let edge: Color? = quiet ? nil : kind == .add ? T.green.opacity(0.6) : kind == .delete ? T.red.opacity(0.6) : nil
+        let edge: Color? = kind == .add ? T.green : kind == .delete ? T.red : nil
         let fill: Color? = if let lit { lit.opacity(0.12) } else if let band { band.opacity(0.045) }
-            else if quiet { nil } else if kind == .add { T.green.opacity(0.06) } else if kind == .delete { T.red.opacity(0.07) } else { nil }
+            else if quiet { nil } else if kind == .add { T.green.opacity(0.13) } else if kind == .delete { T.red.opacity(0.15) } else { nil }
         return fill == nil && edge == nil ? nil : .init(row: i, fill: fill, edge: edge)
     }
 
@@ -382,11 +400,15 @@ struct RowPaint: View {
     let paints: [Paint]
     /// Drawn here rather than as a view per line, which costs as much again as the code beside it.
     let numbers: [Number]
+    /// The + or − between a line's number and its code, so a change reads without telling red from green.
+    let marks: [Number]
     /// Read while drawing: layout has placed the rows by then.
     let frames: DiffRowFrames
     let bar: CGFloat
     /// Where a number's top right corner sits inside its row.
     let numberEdge: CGPoint
+    /// Where a mark's center sits inside its row.
+    let markX: CGFloat
     let numberFont: Font
 
     var body: some View {
@@ -400,6 +422,13 @@ struct RowPaint: View {
                 guard let f = frames.frames[n.row] else { continue }
                 context.draw(Text(verbatim: n.text).font(numberFont).foregroundStyle(n.color),
                              at: CGPoint(x: f.minX + numberEdge.x, y: f.minY + numberEdge.y), anchor: .topTrailing)
+            }
+            var resolved: [String: GraphicsContext.ResolvedText] = [:]
+            for m in marks {
+                guard let f = frames.frames[m.row] else { continue }
+                let text = resolved[m.text] ?? context.resolve(Text(verbatim: m.text).font(numberFont.weight(.bold)).foregroundStyle(m.color))
+                resolved[m.text] = text
+                context.draw(text, at: CGPoint(x: f.minX + markX, y: f.minY + numberEdge.y), anchor: .top)
             }
         }
         .allowsHitTesting(false)

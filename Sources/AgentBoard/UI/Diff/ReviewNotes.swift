@@ -164,9 +164,38 @@ struct DiffCounts: View, Zoomed {
     let file: DiffFile
     var body: some View {
         HStack(spacing: z(4)) {
-            if file.additions > 0 { Text(verbatim: "+\(file.additions)").foregroundStyle(T.green.opacity(0.8)) }
-            if file.deletions > 0 { Text(verbatim: "−\(file.deletions)").foregroundStyle(T.red.opacity(0.8)) }
+            if file.additions > 0 { Text(verbatim: "+\(file.additions)").foregroundStyle(T.green) }
+            if file.deletions > 0 { Text(verbatim: "−\(file.deletions)").foregroundStyle(T.red) }
         }
         .font(mono(10))
+    }
+}
+
+/// A file the PR creates or deletes, tagged with its own icon so it reads before the counts do.
+struct FileChangeTag: View, Zoomed {
+    @Environment(\.zoom) var zoom
+    let status: String
+    var short = false
+
+    var body: some View {
+        if let (label, icon, color) = style {
+            HStack(spacing: z(3)) {
+                Image(systemName: icon).font(.system(size: z(8.5), weight: .bold))
+                Text(label).font(ui(10, .semibold))
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, z(5)).padding(.vertical, z(1.5))
+            .background(color.opacity(0.16), in: Capsule())
+            .overlay(Capsule().strokeBorder(color.opacity(0.55)))
+            .fixedSize()
+        }
+    }
+
+    var style: (String, String, Color)? {
+        switch status {
+        case "added": (short ? "New" : "New file", "plus", T.green)
+        case "removed": (short ? "Deleted" : "Deleted file", "trash", T.red)
+        default: nil
+        }
     }
 }

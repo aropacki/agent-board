@@ -49,8 +49,9 @@ enum T {
     static let bracket = text.opacity(0.12)
 
     static let blue = Color(hex: 0x339cff)
-    static let green = Color(hex: 0x40c977)
-    static let red = Color(hex: 0xff6764)
+    /// Apart in brightness and in blue as well as in hue, so the pair still reads to red-green colorblind eyes.
+    static let green = Color(hex: 0x3ed598)
+    static let red = Color(hex: 0xff5a52)
     static let orange = Color(hex: 0xff8549)
     static let yellow = Color(hex: 0xffd240)
     static let purple = Color(hex: 0xad7bf9)

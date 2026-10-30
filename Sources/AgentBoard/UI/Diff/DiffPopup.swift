@@ -179,7 +179,9 @@ struct DiffPopup: View, Zoomed {
                                                 let stamp = f.stamp, numWidth = lineNumberWidth(f), start = map.start(f.path) ?? 0
                                                 ForEach(pieces(f, threads: fileThreads, ghosts: ghosts)) { piece in
                                                     DiffChunkView(pr: pr, file: f, rows: piece.rows, last: piece.last, stamp: stamp, numWidth: numWidth,
-                                                                  threads: piece.threads, ghosts: piece.ghosts, draft: draft)
+                                                                  threads: piece.threads, ghosts: piece.ghosts,
+                                                                  fileHasNotes: !fileThreads.isEmpty || ghosts.contains { $0.path == f.path },
+                                                                  draft: draft)
                                                         .equatable()
                                                         .id(piece.id)
                                                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: {
@@ -368,6 +370,8 @@ struct DiffPopup: View, Zoomed {
                             VStack(alignment: .leading, spacing: z(1)) {
                                 HStack(spacing: z(4)) {
                                     Text((f.path as NSString).lastPathComponent).font(ui(11.5)).foregroundStyle(f.generated || reviewed ? T.text3 : T.text2).lineLimit(1)
+                                        .strikethrough(f.status == "removed", color: T.red.opacity(0.7))
+                                    FileChangeTag(status: f.status, short: true)
                                     if reviewed { Image(systemName: "checkmark").font(.system(size: z(8.5), weight: .bold)).foregroundStyle(T.green.opacity(0.8)) }
                                 }
                                 Text((f.path as NSString).deletingLastPathComponent).font(ui(10)).foregroundStyle(T.text3).lineLimit(1).truncationMode(.head)
