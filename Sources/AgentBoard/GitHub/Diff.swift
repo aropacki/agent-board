@@ -113,8 +113,9 @@ func parsePRFiles(_ ndjson: String) -> [DiffFile] {
 /// Blocks. The PR's changed files and the head commit a new comment is pinned to.
 func fetchDiff(_ pr: PR) -> Result<PRDiff, DiscussionError> {
     let (filesStatus, files) = runTool(ghPath, ["api", "--paginate", "repos/\(pr.repo)/pulls/\(pr.number)/files?per_page=100",
-                                                "--jq", ".[] | {filename, status, additions, deletions, patch, previous_filename}"])
-    let (shaStatus, sha) = runTool(ghPath, ["api", "repos/\(pr.repo)/pulls/\(pr.number)", "--jq", ".head.sha"])
+                                                "--jq", ".[] | {filename, status, additions, deletions, patch, previous_filename}"],
+                                       timeout: readTimeout * 3)
+    let (shaStatus, sha) = runTool(ghPath, ["api", "repos/\(pr.repo)/pulls/\(pr.number)", "--jq", ".head.sha"], timeout: readTimeout)
     let head = sha.trimmingCharacters(in: .whitespacesAndNewlines)
     guard filesStatus == 0, shaStatus == 0, !head.isEmpty else {
         return .failure(DiscussionError(message: withReason("Couldn't load the diff from GitHub.", filesStatus == 0 ? sha : files)))

@@ -230,6 +230,11 @@ extension Bench {
               && parseStackMerge("{\"status\":\"failed\",\"details\":{\"message\":\"Pull request is a draft\"}}\ngh: (HTTP 400)")?
                 .details.message == "Pull request is a draft"
               && parseStackMerge("gh: Not Found (HTTP 404)") == nil)
+
+        let hungStart = Date()
+        let hung = runTool("/bin/sleep", ["5"], timeout: 0.3)
+        check("read timeout: a stalled tool is stopped and fails, so its loading state clears",
+              hung.0 != 0 && Date().timeIntervalSince(hungStart) < 2 && runTool("/bin/echo", ["ok"], timeout: 5) == (0, "ok"))
         let file = DiffFile(path: "a.ts", previousPath: nil, status: "modified", additions: 3, deletions: 1, lines: patch, generated: false)
         let touched = DiffFile(path: "a.ts", previousPath: nil, status: "modified", additions: 3, deletions: 1,
                                lines: parsePatch("@@ -10,4 +10,5 @@ func a() {\n ctx\n-old\n+newer\n+more\n ctx2"), generated: false)

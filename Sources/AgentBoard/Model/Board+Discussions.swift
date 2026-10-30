@@ -31,12 +31,17 @@ extension Board {
         }
     }
 
+    /// `explicit` is the user asking, which starts a fetch even with one in flight: the one in flight may be the
+    /// reason they asked.
     func loadDiscussion(_ pr: PR, explicit: Bool = false) {
-        guard !discussionLoading.contains(pr.key) else { return }
+        guard explicit || !discussionLoading.contains(pr.key) else { return }
         discussionLoading.insert(pr.key)
+        let request = (discussionRequests[pr.key] ?? 0) + 1
+        discussionRequests[pr.key] = request
         DispatchQueue.global(qos: .userInitiated).async {
             let result = fetchDiscussion(pr)
             DispatchQueue.main.async {
+                guard self.discussionRequests[pr.key] == request else { return }
                 self.discussionLoading.remove(pr.key)
                 switch result {
                 case .success(let d):

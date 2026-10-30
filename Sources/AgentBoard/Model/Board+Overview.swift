@@ -75,7 +75,7 @@ extension Board {
             while result?.status == "pending", let uuid = result?.details.uuid, polls < 300, misses < 3 {
                 Thread.sleep(forTimeInterval: 1)
                 polls += 1
-                (_, output) = runTool(ghPath, stackMergePollArgs(pr, uuid: uuid))
+                (_, output) = runTool(ghPath, stackMergePollArgs(pr, uuid: uuid), timeout: readTimeout)
                 if let next = parseStackMerge(output) { result = next; misses = 0 } else { misses += 1 }
             }
             DispatchQueue.main.async {

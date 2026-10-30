@@ -105,7 +105,7 @@ func parseCheckRollups(_ output: String) -> [Int: [CICheck]]? {
 
 /// Blocks. Checks for many PRs in one request, by PR key.
 func fetchChecks(_ prs: [PR]) -> Result<[String: [CICheck]], DiscussionError> {
-    let (_, output) = runTool(ghPath, ["api", "graphql", "-f", "query=\(checksQuery(prs))"])
+    let (_, output) = runTool(ghPath, ["api", "graphql", "-f", "query=\(checksQuery(prs))"], timeout: readTimeout)
     guard let rollups = parseCheckRollups(output) else {
         return .failure(DiscussionError(message: withReason("Couldn't load CI checks from GitHub.", output)))
     }

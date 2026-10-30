@@ -304,9 +304,11 @@ struct DiffPopup: View, Zoomed {
                 board.loadDiff(pr, explicit: true)
                 board.loadOverview(pr, explicit: true)
                 board.loadChecks(pr, explicit: true)
+                board.loadDiscussion(pr, explicit: true)
             } label: {
                 ZStack {
-                    if board.diffLoading.contains(pr.key) || board.overviewLoading.contains(pr.key) {
+                    if board.diffLoading.contains(pr.key) || board.overviewLoading.contains(pr.key)
+                        || board.discussionLoading.contains(pr.key) {
                         ProgressView().controlSize(.mini)
                     } else {
                         Image(systemName: "arrow.clockwise")

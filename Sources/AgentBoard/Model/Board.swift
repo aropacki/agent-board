@@ -87,6 +87,8 @@ final class Board {
     @ObservationIgnored var discussionsFetchedAt: [String: Date] = [:]
     /// Each PR's unresolved count when its discussion was fetched, so a new thread refetches it.
     @ObservationIgnored var discussionsUnresolved: [String: Int] = [:]
+    /// The newest discussion fetch per PR. A refresh starts a new one, and only the newest lands.
+    @ObservationIgnored var discussionRequests: [String: Int] = [:]
     @ObservationIgnored var cacheSave: DispatchWorkItem?
     /// The PR whose checks are open, and on which surface.
     var checksOpen: (key: String, surface: String)?

@@ -125,7 +125,7 @@ func fetchDiscussion(_ pr: PR) -> Result<PRDiscussion, DiscussionError> {
     let parts = pr.repo.split(separator: "/").map(String.init)
     guard parts.count == 2 else { return .failure(DiscussionError(message: "Unknown repo \(pr.repo).")) }
     let (status, output) = runTool(ghPath, ["api", "graphql", "-f", "query=\(discussionQuery)", "-f", "owner=\(parts[0])",
-                                            "-f", "repo=\(parts[1])", "-F", "number=\(pr.number)"])
+                                            "-f", "repo=\(parts[1])", "-F", "number=\(pr.number)"], timeout: readTimeout)
     guard status == 0, let discussion = parseDiscussion(Data(output.utf8)) else {
         return .failure(DiscussionError(message: withReason("Couldn't load the comments from GitHub.", status == 0 ? "" : output)))
     }

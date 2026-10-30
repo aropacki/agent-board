@@ -14,6 +14,7 @@ extension Board {
             presentPopup()
         }
         if diffs[pr.key] == nil { loadDiff(pr) }
+        loadDiscussion(pr)
         loadOverview(pr)
     }
 

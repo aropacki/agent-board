@@ -8,12 +8,23 @@ extension Board {
         var seen = Set<String>()
         let prs = (allPRs + (state?.allCards ?? []).flatMap(\.prs)).filter { $0.hidden != true && seen.insert($0.key).inserted }
         loadChecks(prs.filter { Date().timeIntervalSince(checksFetchedAt[$0.key] ?? .distantPast) > 45 })
-        let discussed = prs.filter { pr in
-            guard pr.unresolved > 0 || pr.hasFeedback else { return false }
+        prefetchDiscussions(prs)
+    }
+
+    /// A comment the board announces is fetched as it is announced, so opening the PR shows it at once.
+    func prefetchDiscussions(_ prs: [PR]) {
+        let fresh = prs.filter { commentedSinceFetch($0) }
+        let stale = prs.filter { pr in
+            guard pr.unresolved > 0 || pr.hasFeedback, !commentedSinceFetch(pr) else { return false }
             return discussionsUnresolved[pr.key] != pr.unresolved
                 || Date().timeIntervalSince(discussionsFetchedAt[pr.key] ?? .distantPast) > 300
         }
-        discussed.prefix(4).forEach { loadDiscussion($0) }
+        (fresh + stale).prefix(4).forEach { loadDiscussion($0) }
+    }
+
+    func commentedSinceFetch(_ pr: PR) -> Bool {
+        guard let newest = pr.unread.map(\.at).max() else { return false }
+        return newest > (discussionsFetchedAt[pr.key]?.timeIntervalSince1970 ?? 0)
     }
 
     func restoreFetchCache() {
@@ -99,6 +110,7 @@ extension Board {
                 self.notePRRefresh(decoded, explicit: false)
                 guard changed else { return }
                 self.present(decoded)
+                if !isBench { self.prefetchDiscussions(self.allPRs.filter { $0.hidden != true }) }
                 if let previous {
                     let events = tickerEvents(from: previous, to: decoded)
                     self.pushTicker(events)

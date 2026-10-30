@@ -252,7 +252,7 @@ func fetchOverview(_ pr: PR) -> Result<PROverview, DiscussionError> {
     let parts = pr.repo.split(separator: "/").map(String.init)
     guard parts.count == 2 else { return .failure(DiscussionError(message: "Unknown repo \(pr.repo).")) }
     let (status, output) = runTool(ghPath, ["api", "graphql", "-f", "query=\(overviewQuery)", "-f", "owner=\(parts[0])",
-                                            "-f", "repo=\(parts[1])", "-F", "number=\(pr.number)"])
+                                            "-f", "repo=\(parts[1])", "-F", "number=\(pr.number)"], timeout: readTimeout)
     guard status == 0, let overview = parseOverview(Data(output.utf8)) else {
         return .failure(DiscussionError(message: withReason("Couldn't load the PR from GitHub.", status == 0 ? "" : output)))
     }
