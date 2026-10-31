@@ -82,21 +82,22 @@ struct BannerCard: View, Zoomed {
     @State private var wash: Double = 1
     @State private var bounce = 0
 
-    /// "#123 Title · detail" splits into the number, the title, and what follows.
+    /// "#123 Title · detail" or "ABC-12 Title · detail" splits into the number, the title, and what follows.
     var parts: (number: String?, title: String, detail: String?) {
         let pieces = event.subject.components(separatedBy: " · ")
         let head = pieces[0]
         let detail = pieces.count > 1 ? pieces.dropFirst().joined(separator: " · ") : nil
-        guard head.hasPrefix("#"), let space = head.firstIndex(of: " ") else { return (nil, head, detail) }
-        return (String(head[..<space]), String(head[head.index(after: space)...]), detail)
+        guard let id = head.prefixMatch(of: #/(#\d+|[A-Z][A-Z0-9]*-\d+) /#) else { return (nil, head, detail) }
+        return (String(id.1), String(head[id.range.upperBound...]), detail)
     }
 
     var shape: RoundedRectangle { RoundedRectangle(cornerRadius: z(14), style: .continuous) }
 
-    /// Capitals for the kind; a handle in it keeps its case.
+    /// Capitals for the kind; the person in it keeps their case.
     var heading: Text {
         let label = event.label
-        let split = label.range(of: " @")?.lowerBound ?? label.endIndex
+        let person = (label.range(of: " from ") ?? label.range(of: " by ")).map { label.index(before: $0.upperBound) }
+        let split = person ?? label.range(of: " @")?.lowerBound ?? label.endIndex
         let kind = Text(label[..<split].uppercased()).font(ui(10, .bold)).tracking(0.7)
         let who = Text(label[split...]).font(ui(11, .semibold))
         return Text("\(kind)\(who)").foregroundStyle(event.color)

@@ -63,7 +63,7 @@ install: app
 	@# Notification banners read the icon from Launch Services, which keeps the old one until told.
 	$(LSREGISTER) -f "$(APP)"
 	install -m 755 collector/collect.py collector/journal-hook.py collector/act.sh "$(AGENT_BOARD_HOME)/bin/"
-	install -m 644 collector/config.py collector/refs.py collector/common.py "$(AGENT_BOARD_HOME)/bin/"
+	install -m 644 collector/config.py collector/refs.py collector/common.py collector/linear.py "$(AGENT_BOARD_HOME)/bin/"
 	mkdir -p "$(AGENT_BOARD_HOME)/bin/sources" "$(AGENT_BOARD_HOME)/bin/worktrees"
 	install -m 644 collector/sources/*.py "$(AGENT_BOARD_HOME)/bin/sources/"
 	install -m 644 collector/worktrees/*.py "$(AGENT_BOARD_HOME)/bin/worktrees/"

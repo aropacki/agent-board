@@ -342,6 +342,18 @@ extension Bench {
               events.map(\.kind) == [.finished, .needsYou, .review, .ciFailed, .approved, .comments]
               && events.allSatisfy { $0.target != nil } && tickerEvents(from: after, to: after).isEmpty
               && events.last?.text == "Comment from @alice: #2 T2 · “Why this?”")
+        let note = LinearFeed.Event(id: "n1", kind: "comments", text: "Comment from Claude: #2 T2", target: "comments:o/r#2", read: false)
+        let seenNote = LinearFeed.Event(id: "n2", kind: "review", text: "Review requested: #6 T6 · Ana", target: nil, read: true)
+        var linBefore = before, linAfter = after, firstLoad = after, failing = after
+        linBefore.linear = LinearFeed(events: [])
+        linAfter.linear = LinearFeed(events: [note, seenNote])
+        firstLoad.linear = linAfter.linear
+        failing.linear = LinearFeed(error: "Linear answered 500", events: [])
+        let linear = tickerEvents(from: linBefore, to: linAfter)
+        check("linear: a new unread notification reports once in place of the PR diff's reviews and comments, the first load says nothing, and a failing feed falls back to the diff",
+              linear.map(\.kind) == [.finished, .needsYou, .comments, .ciFailed] && linear[2].linearID == "n1"
+              && tickerEvents(from: before, to: firstLoad).map(\.kind) == [.finished, .needsYou, .ciFailed]
+              && tickerEvents(from: linBefore, to: failing).map(\.kind) == events.map(\.kind))
         var parent = card("p", "idle", prs: [pr(9, mine: true)]), busy = card("q", "idle")
         var side = card("s", "done", ["finished"], prs: [pr(9, mine: true)])
         side.kind = "side"

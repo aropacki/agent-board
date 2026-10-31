@@ -4,7 +4,7 @@ import SwiftUI
 /// Banners for what another person is waiting on you for, the way a chat app shows a direct message.
 /// Everything else stays in the ticker. The board draws them itself, because a system banner can't be styled.
 final class Notifier {
-    static let alerting: Set<TickerEvent.Kind> = [.comments, .changes, .review]
+    static let alerting: Set<TickerEvent.Kind> = [.comments, .changes, .review, .issue]
     let board: Board
     let banners = Banners()
     let window: NSPanel

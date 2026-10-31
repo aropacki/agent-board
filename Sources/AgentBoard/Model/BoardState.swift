@@ -124,6 +124,19 @@ struct Card: Decodable, Identifiable, Equatable {
     }
 }
 
+struct LinearFeed: Decodable, Equatable {
+    struct Event: Decodable, Equatable {
+        let id: String
+        let kind: String
+        let text: String
+        let target: String?
+        let read: Bool
+    }
+    /// Why the last fetch failed; the events are then the last ones fetched.
+    var error: String? = nil
+    let events: [Event]
+}
+
 struct BoardState: Decodable, Equatable {
     let generatedAt: Double
     let cards: [Card]
@@ -133,6 +146,8 @@ struct BoardState: Decodable, Equatable {
     /// Why the last GitHub PR fetch failed; nil once one succeeds.
     var prError: String? = nil
     var prsFetchedAt: Double? = nil
+    /// The Linear inbox; nil while no Linear key is set.
+    var linear: LinearFeed? = nil
 
     /// Children come before their parent: a parent also lists its children's PRs, and a PR's own chat should win.
     var allCards: [Card] { cards.flatMap { ($0.children ?? []) + [$0] } }

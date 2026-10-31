@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 struct TickerEvent: Equatable, Identifiable, Codable {
-    enum Kind: String, Codable { case finished, needsYou, review, ciFailed, ciPassed, approved, changes, comments, agentReview }
+    enum Kind: String, Codable { case finished, needsYou, review, ciFailed, ciPassed, approved, changes, comments, agentReview, issue }
     let kind: Kind
     let text: String
     var id = UUID()
     var at = Date()
     /// `card:<chat id>`, `comments:`, `checks:`, or `diff:` and a PR key, or a URL: what the activity log opens.
     var target: String? = nil
+    /// The Linear notification behind the event, marked read when the event is opened.
+    var linearID: String? = nil
 
     /// "Finished: Title" splits into the label and the subject.
     var label: String { text.range(of: ": ").map { String(text[..<$0.lowerBound]) } ?? "" }
@@ -26,11 +28,12 @@ struct TickerEvent: Equatable, Identifiable, Codable {
         case .changes: return "exclamationmark.bubble.fill"
         case .comments: return "text.bubble.fill"
         case .agentReview: return "sparkles"
+        case .issue: return "ticket.fill"
         }
     }
     var color: Color {
         switch kind {
-        case .comments, .agentReview: return T.blue
+        case .comments, .agentReview, .issue: return T.blue
         case .finished, .ciPassed, .approved: return T.green
         case .needsYou, .changes: return T.orange
         case .review: return T.purple
@@ -80,8 +83,17 @@ func tickerEvents(from old: BoardState, to new: BoardState) -> [TickerEvent] {
                                    target: "card:\(card.id)"))
         }
     }
+    // A working Linear feed reports reviews and comments; the PR diff would repeat each one.
+    let fromLinear = new.linear != nil && new.linear?.error == nil
+    if let feed = new.linear, let before = old.linear {
+        let seen = Set(before.events.map(\.id))
+        for e in feed.events where !e.read && !seen.contains(e.id) {
+            guard let kind = TickerEvent.Kind(rawValue: e.kind) else { continue }
+            out.append(TickerEvent(kind: kind, text: e.text, target: e.target, linearID: e.id))
+        }
+    }
     let oldReview = Set((old.prs?.review ?? []).map(\.key))
-    for pr in new.prs?.review ?? [] where !oldReview.contains(pr.key) && pr.hidden != true && !pr.stale {
+    for pr in new.prs?.review ?? [] where !fromLinear && !oldReview.contains(pr.key) && pr.hidden != true && !pr.stale {
         out.append(TickerEvent(kind: .review, text: "Review requested: #\(pr.number) \(pr.displayTitle) · @\(pr.author)",
                                target: pr.url))
     }
@@ -95,6 +107,7 @@ func tickerEvents(from old: BoardState, to new: BoardState) -> [TickerEvent] {
         if pr.ci == "passing" && (before.ci == "failing" || before.ci == "running") {
             out.append(TickerEvent(kind: .ciPassed, text: "CI passed: \(name)", target: pr.url))
         }
+        if fromLinear { continue }
         if pr.review != before.review {
             if pr.review == "APPROVED" { out.append(TickerEvent(kind: .approved, text: "Approved: \(name)", target: pr.url)) }
             if pr.review == "CHANGES_REQUESTED" {

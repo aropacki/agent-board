@@ -8,6 +8,7 @@ extension Board {
     }
 
     func openActivity(_ event: TickerEvent, surface: String = "panel") {
+        if let id = event.linearID { markLinearRead(id) }
         guard let target = event.target else { return }
         if target.hasPrefix("card:") {
             open(id: String(target.dropFirst(5)))
@@ -21,6 +22,15 @@ extension Board {
             show(.error, "That PR is no longer on the board.")
         } else {
             openLink(target)
+        }
+    }
+
+    private func markLinearRead(_ id: String) {
+        DispatchQueue.global(qos: .utility).async {
+            let (code, output) = runTool("/usr/bin/python3", [collectScript, "linear-read", id], qos: .utility)
+            DispatchQueue.main.async {
+                if code == 0 { self.refreshSucceeded("linear") } else { self.refreshFailed("linear", output.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            }
         }
     }
 

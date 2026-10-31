@@ -8,6 +8,7 @@ Usage:
   collect.py                 refresh state.json and CURRENT.md
   collect.py return <path>   free a worktree slot after re-checking it is safe
   collect.py backfill        record PR and branch references from existing transcripts once
+  collect.py linear-read <id>  mark a Linear notification read
 """
 
 import calendar
@@ -22,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import linear  # noqa: E402
 import sources  # noqa: E402
 import worktrees  # noqa: E402
 from common import BOARD_WINDOW_S, RETENTION_S, ago, chat_status, new_entries, read_json, run, write_atomic  # noqa: E402
@@ -60,6 +62,11 @@ LSOF_TTL_S = 60
 LSOF_CACHE = os.path.join(CACHE_DIR, "lsof.json")
 GIT_CACHE = os.path.join(CACHE_DIR, "git.json")
 FRESH = "--fresh" in sys.argv
+LINEAR = "--linear" in sys.argv
+LINEAR_CACHE = os.path.join(CACHE_DIR, "linear.json")
+LINEAR_TTL_S = 30
+# Without a key, the Keychain is looked at again this often, so adding one turns the source on.
+LINEAR_KEY_RECHECK_S = 300
 SHELLS = {"zsh", "bash", "sh", "fish", "-zsh", "-bash", "login"}
 
 os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:" + os.environ.get("PATH", "")
@@ -706,9 +713,8 @@ def load_prs(now):
     """Cached open PRs by kind ("mine", "review"). Starts a background refresh once the cache is PR_TTL_S old."""
     cached = read_json(PR_CACHE, {})
     last_try = max(cached.get("fetched_at", 0), cached.get("attempted_at", 0))
-    if not FRESH and now - last_try >= PR_TTL_S:
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--fresh"], start_new_session=True,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not FRESH and not LINEAR and now - last_try >= PR_TTL_S:
+        spawn("--fresh")
     return cached.get("prs", {"mine": [], "review": []})
 
 
@@ -771,6 +777,63 @@ def refresh_prs(now):
     write_atomic(PR_CACHE, json.dumps({"fetched_at": now, "prs": prs}))
     log_refresh(now, started, previous, prs, None)
     return True
+
+
+def spawn(flag):
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), flag], start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def load_linear(now):
+    """The cached Linear inbox. Starts a background refresh once it is LINEAR_TTL_S old, or LINEAR_KEY_RECHECK_S
+    after the Keychain last had no key."""
+    cached = read_json(LINEAR_CACHE, {})
+    last_try = max(cached.get("fetched_at", 0), cached.get("attempted_at", 0))
+    ttl = LINEAR_TTL_S if cached.get("enabled") else LINEAR_KEY_RECHECK_S
+    if not FRESH and not LINEAR and now - last_try >= ttl:
+        spawn("--linear")
+    return cached
+
+
+def refresh_linear(now):
+    """Fetches the inbox into the cache. True when a PR event arrived that the PR cache predates, so the PR
+    it names is fresh by the time its banner is opened."""
+    os.makedirs(BOARD, exist_ok=True)
+    lock = open(os.path.join(BOARD, ".linear.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    cached = read_json(LINEAR_CACHE, {})
+    key = linear.api_key()
+    if not key:
+        write_atomic(LINEAR_CACHE, json.dumps({"attempted_at": now, "enabled": False}))
+        return False
+    records, why = linear.fetch(key, now)
+    if why:
+        write_atomic(LINEAR_CACHE, json.dumps(dict(cached, attempted_at=now, enabled=True, error=why)))
+        return False
+    known = {r["id"] for r in cached.get("records") or []}
+    write_atomic(LINEAR_CACHE, json.dumps({"fetched_at": now, "enabled": True, "records": records}))
+    prs_at = read_json(PR_CACHE, {}).get("fetched_at", 0)
+    return any(r["pr"] and r["id"] not in known and r["at"] > prs_at for r in records)
+
+
+def linear_feed(cached, board_prs):
+    if not cached.get("enabled"):
+        return None
+    failed = cached.get("attempted_at", 0) > cached.get("fetched_at", 0)
+    return {"error": cached.get("error") if failed else None,
+            "events": linear.events(cached.get("records") or [], board_prs)}
+
+
+def linear_read(notification_id):
+    key = linear.api_key()
+    why = linear.mark_read(key, notification_id) if key else "no Linear key in the Keychain"
+    if why:
+        print(why)
+        return 1
+    return 0
 
 
 def log_refresh(now, started, previous, prs, error):
@@ -975,7 +1038,8 @@ def build(now):
     pr_failed = pr_cache.get("attempted_at", 0) > pr_cache.get("fetched_at", 0)
     return {"generated_at": now, "cards": [c for c in cards if not c["hidden"]], "loose_slots": loose, "prs": sections,
             "hidden_cards": [c for c in cards if c["hidden"]] + hidden_kids,
-            "pr_error": pr_cache.get("error") if pr_failed else None, "prs_fetched_at": pr_cache.get("fetched_at")}
+            "pr_error": pr_cache.get("error") if pr_failed else None, "prs_fetched_at": pr_cache.get("fetched_at"),
+            "linear": linear_feed(load_linear(now), set(open_prs))}
 
 
 def write_linked_wanted(chats, per, every_pr, now):
@@ -1085,7 +1149,14 @@ def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "backfill":
         backfill(time.time())
         return
-    if FRESH:
+    if len(sys.argv) >= 3 and sys.argv[1] == "linear-read":
+        sys.exit(linear_read(sys.argv[2]))
+    if LINEAR:
+        stale_prs = refresh_linear(time.time())
+        write_state(blocking=True)
+        if stale_prs and refresh_prs(time.time()):
+            write_state(blocking=True)
+    elif FRESH:
         write_state(blocking=True)
         refresh_prs(time.time())
         # Also after a failed fetch, so the board learns why its PRs are stale.
