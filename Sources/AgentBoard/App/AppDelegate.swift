@@ -100,7 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// is up: an inactive app's panel loses the keyboard whenever the front app takes it back, and an inactive app
     /// runs at background priority. The app that was in front gets activation back when the popup goes.
     func showPopup() {
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+        // While displays reconfigure, the pointer can be on no screen and `main` can be nil.
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
         if popup == nil {
             let p = PopupPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)

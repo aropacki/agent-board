@@ -167,6 +167,8 @@ final class Board {
         windowVisible = true
         if popupPresented {
             withAnimation(Motion.content) { boardOpen = true }
+            // Presented can outlive the window, as when no screen was found to show it on.
+            popupChanged?()
         } else {
             boardOpen = true
             presentPopup()
