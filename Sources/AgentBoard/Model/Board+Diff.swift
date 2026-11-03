@@ -3,6 +3,7 @@ import SwiftUI
 
 extension Board {
     func openDiff(_ pr: PR, path: String? = nil, line: Int? = nil, thread: String? = nil) {
+        popupLog("openDiff \(popupState)")
         closeMenu()
         diffSelection = nil
         let target = DiffTarget(key: pr.key, path: path, line: line, thread: thread)

@@ -162,6 +162,7 @@ final class Board {
     }
 
     func openBoard() {
+        popupLog("openBoard \(popupState)")
         closeMenu()
         showActions = false
         windowVisible = true
@@ -176,6 +177,8 @@ final class Board {
         reload()
         collectIfStale()
     }
+
+    var popupState: String { "presented=\(popupPresented) board=\(boardOpen) diff=\(diffOpen != nil)" }
 
     /// Closes the diff viewer and the board together.
     func closePopup() {
@@ -192,8 +195,11 @@ final class Board {
 
     /// Fades the popup out, then takes the window down. Opening it again during the fade keeps it up.
     func dismissPopupWindow() {
+        popupLog("dismiss \(popupState)")
         withAnimation(Motion.window) { popupPresented = false } completion: { [weak self] in
-            guard let self, !self.popupPresented else { return }
+            guard let self else { return }
+            popupLog("dismissed \(popupState)")
+            guard !self.popupPresented else { return }
             diffOpen = nil
             boardOpen = false
             windowVisible = false

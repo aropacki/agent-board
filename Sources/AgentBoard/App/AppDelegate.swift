@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.orderFrontRegardless()
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            popupLog("screens changed count=\(NSScreen.screens.count)")
             self?.place(frontX: false)
             self?.placeTickers()
         }
@@ -76,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// state change. Detached, it does no work until shown again, then catches up once.
     func hidePopup() {
         guard let popup else { return }
+        popupLog("hide visible=\(popup.isVisible) \(board.popupState)")
         let hadKeyboard = popup.isKeyWindow
         popup.orderOut(nil)
         popup.contentView = NSView()
@@ -127,10 +129,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             popup.setFrame(f, display: false)
             if let front = NSWorkspace.shared.frontmostApplication, front != .current { popupReturnTo = front }
         }
+        let wasVisible = popup.isVisible
         popup.orderFrontRegardless()
         NSApp.activate()
         popup.makeKey()
         syncActivity()
+        popupLog("show wasVisible=\(wasVisible) visible=\(popup.isVisible) onSpace=\(popup.isOnActiveSpace) active=\(NSApp.isActive) frame=\(popup.frame) \(board.popupState)")
     }
 
     /// Clicking into another app, or another of the board's windows, closes the popup. While the app is still
@@ -139,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let popup, (notification.object as? NSWindow) === popup, popupHolds == 0 else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.popupHolds == 0, popup.isVisible, !popup.isKeyWindow else { return }
+            popupLog("resignKey active=\(NSApp.isActive) keyWindow=\(NSApp.keyWindow.map { "\(type(of: $0))" } ?? "none")")
             if NSApp.isActive && NSApp.keyWindow == nil {
                 popup.makeKey()
                 return
